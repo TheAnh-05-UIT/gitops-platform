@@ -1,0 +1,4 @@
+region,cpu_mcpu,memory_mib,price_usd_per_hour
+us-east-1,1000,1024,0.020
+eu-west-1,1500,1536,0.024
+ap-southeast-1,1500,1536,0.028
