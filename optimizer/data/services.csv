@@ -1,0 +1,2 @@
+service,cpu_mcpu_per_replica,memory_mib_per_replica,replicas,max_rtt_ms
+workload-api,100,64,2,100
