@@ -54,4 +54,12 @@ Config now contains the frozen seed, promotion schema, trusted-base merge guard 
 
 Local P0.3 verification passed 19 Config, 4 Workload and 3 Platform tests. Helm lint, render and the Deployment and exact-image policies passed for the local chart. The dry-run fixture proposed the deterministic branch and retained all unrelated values. Python compilation, workflow YAML checks and Git diff whitespace checks passed. Dedicated secret scanners and Actionlint were unavailable. A scoped token/key pattern scan found no matches.
 
+## P0.4.1 local hardening
+
+Config verifies the current GitHub synthetic merge from protected base code and requires a GitHub review over an exact candidate digest. Workload builds, scans and publishes in separate jobs. Only its protected publisher uses the GHCR write credential. Candidate provenance requires the split jobs, successful Trivy step, fresh receipt archive and byte-verified manifest matching the scanned image ID. The historical v2 block and existing chart values remain in place.
+
+The P0.4 hosted read-only snapshot showed Config's active `main` ruleset with zero required approvals and a non-strict `Validate workload manifests` check. Workload `main` reported unprotected. These observations are prerequisites to recheck before any hosted integration. No GitHub settings or live promotion state changed in P0.4.1. GitHub-hosted checks and package authentication remain unverified.
+
+Local verification passed 44 tests, including the previous 26, and Helm lint, render and both policies against Config `HEAD`, local `main` and cached `origin/main`. Python syntax, workflow YAML, shell syntax and Git diff checks passed. Docker daemon access was denied, so hosted-style image build, scan and publication could not be exercised locally. See the [runbook](PROMOTION_RUNBOOK.md).
+
 See [security findings](SECURITY.md), [validation commands](TESTING.md) and [the roadmap](ROADMAP.md).
