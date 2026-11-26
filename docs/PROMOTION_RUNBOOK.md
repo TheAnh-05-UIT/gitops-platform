@@ -35,7 +35,7 @@ The second workstation credential is `PROMOTION_SOURCE_READ_TOKEN` with Workload
 
 - The Config bootstrap branch carries policy, tests and frozen control. Its PR into `main` uses the existing `Validate workload manifests` check.
 - The dependent Config branch carries the trusted workflow and its wiring test. Review its diff against the bootstrap branch first. After bootstrap lands, verify ancestry and retarget to `main`. A draft PR alone cannot run the new `pull_request_target` workflow from the trusted base.
-- The Workload review branch hard-disables `publish` in the job expression. The preview remains opt-in and read-only. A later reviewed activation change must establish package permissions and remove the literal false gate under explicit authorization. Hosted PR CI runs unit tests. Test full build and scan on an isolated hosted target with no package-write credential.
+- The Workload review branch hard-disables `publish` in the job expression. The read-only preview also has a literal false gate. A later reviewed activation change must establish the relevant permissions and remove each gate under explicit authorization. Hosted PR CI runs unit tests. Test full build and scan on an isolated hosted target with no package-write credential.
 
 ## P0.4 App and live authorization
 
