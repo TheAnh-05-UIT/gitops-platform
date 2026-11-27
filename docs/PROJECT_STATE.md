@@ -1,5 +1,7 @@
 # Project state
 
+Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
+
 The initialization baseline was recorded on 2026-11-26. P0.1–P0.2 rechecked the local refs and source. GitHub, GHCR, AWS and Kubernetes state can change independently.
 
 | Checkout | Baseline branch and HEAD | Starting worktree |

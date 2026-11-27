@@ -45,3 +45,16 @@ The second workstation credential is `PROMOTION_SOURCE_READ_TOKEN` with Workload
 4. Require a new independently reviewed `repromote` intent for the historical v2 or any later blocked candidate. Record evidence resolving the known issue or an explicit owner disposition of the unknown historical reason. Keep prior blocks and their recorded digests.
 
 See the [promotion design](IMAGE_PROMOTION.md) for acceptance criteria and the [security policy](SECURITY.md) for trust boundaries.
+
+## Owner proposal gate for an image-only PR
+
+The local Config command remains disconnected from Actions. It is a manual hosted mutation gate. Run only after the owner authorizes P0.5, reviews the exact Config base, records admission for the publication run/attempt and configures a protected App branch scope. Confirm package visibility and branch protection before review. Keep Workload publication and preview hard stops unless separately approved.
+
+Use the Config checkout on the reviewed tool SHA. Supply short-lived `PROMOTION_CONFIG_READ_TOKEN`, `PROMOTION_SOURCE_READ_TOKEN`, `PROMOTION_CONFIG_APP_TOKEN`, `PROMOTION_BOT_LOGIN` and private read-only GHCR auth if the image is private. The App installation is Config-only with contents and pull request write authority, no protected main bypass. The Config verifier's optional `PROMOTION_REGISTRY_READ_USER` and `PROMOTION_REGISTRY_READ_TOKEN` are environment-scoped and separate from Workload API and registry publisher credentials. Verify scopes before enabling any operation.
+
+```sh
+PROMOTION_PROPOSAL_ENABLED=true python -B -m scripts.submit_promotion \
+  --request "$APPROVED_REQUEST" --expected-base "$APPROVED_CONFIG_SHA" --confirm-proposal
+```
+
+Use `--pin-digest` only after explicit review of a same-source first pin. The command reads current protected refs and latest attempt evidence, then may create one branch, one exact config-file commit and one PR. It reports the PR number and does not merge. Expect only the approved image fields to change. On an unconfirmed request, compare the existing branch and PR, then repeat the same reviewed request. A stale or unrelated branch stops the command for owner review. Do not force-update a branch. The independent reviewer must check the actual candidate and rerun the trusted check after approving the exact marker if required. Require the check publisher and exact candidate linkage before permitting merge. No AWS operation is involved. The registry and CI services may charge for normal usage. Retain sanitized run/attempt, candidate, digest and reviewer/check evidence. [GitHub REST refs](https://docs.github.com/en/rest/git/refs) · [GitHub GraphQL commits](https://docs.github.com/en/graphql/reference/commits)

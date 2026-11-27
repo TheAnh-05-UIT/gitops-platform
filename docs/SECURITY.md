@@ -1,5 +1,7 @@
 # Security policy and baseline
 
+Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
+
 ## Requirements
 
 - Keep credentials in environment injection or managed secret stores. Avoid printing values from tokens, private keys, kubeconfigs, inventories, Terraform state, plans and sensitive logs. Share sensitive repository details only through authorized channels.
