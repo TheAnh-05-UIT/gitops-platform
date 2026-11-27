@@ -26,6 +26,24 @@ class PlaybookTests(unittest.TestCase):
                     if "ansible.builtin.include_tasks" in child:
                         self.assertIn((path.parent / child["ansible.builtin.include_tasks"]).resolve(), files)
 
+    def test_template_sources_resolve_from_the_bootstrap_playbook(self):
+        playbook_dir = (ROOT / "playbooks").resolve()
+        jinja = Environment(undefined=StrictUndefined)
+        jinja.filters["dirname"] = lambda value: str(Path(value).parent)
+        for filename, template_name in (
+            ("k3s-node.yml", "k3s.service.j2"),
+            ("k3s-start.yml", "k3s-config.yaml.j2"),
+        ):
+            with self.subTest(task_file=filename):
+                task_file = playbook_dir / "tasks" / filename
+                tasks = yaml.safe_load(task_file.read_text(encoding="utf-8"))
+                template = next(
+                    task["ansible.builtin.template"] for task in tasks if "ansible.builtin.template" in task
+                )
+                source = Path(jinja.from_string(template["src"]).render(playbook_dir=str(playbook_dir)))
+                self.assertEqual(source, playbook_dir.parent / "templates" / template_name)
+                self.assertTrue(source.is_file())
+
     def test_rendered_k3s_uses_private_address_and_separate_tokens(self):
         jinja = Environment(undefined=StrictUndefined)
         jinja.filters["to_json"] = json.dumps

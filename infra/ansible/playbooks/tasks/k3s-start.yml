@@ -1,7 +1,7 @@
 ---
 - name: Render the approved node configuration
   ansible.builtin.template:
-    src: ../templates/k3s-config.yaml.j2
+    src: "{{ playbook_dir | dirname }}/templates/k3s-config.yaml.j2"
     dest: /etc/rancher/k3s/gitops-platform.yaml
     mode: "0600"
   notify: Restart K3s
