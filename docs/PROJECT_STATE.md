@@ -1,5 +1,11 @@
 # Project state
 
+## Nghiệm thu R2 Local Runtime
+
+Ba worktree giữ trên nhánh cục bộ `chore/r2-local-runtime`. Platform giữ sửa Ansible `8b7886e`, Workload `b0ddbba` khóa OCI base và Linux wheels, Config `dfd3486` và `b235d28` sửa Alertmanager và Alloy. k3d ba node, Argo sync/drift/revert, telemetry, browser Portal với OIDC giả lập, optimizer với dữ liệu Kubernetes thật, k6/HPA, Pod recovery và drain đều có bằng chứng lab. Trivy báo 54 HIGH trên ảnh Trixie. Ảnh Workload Alpine `1fa207e` khóa bản sửa Kerberos và đã qua cùng gate với 0 HIGH, 0 CRITICAL và 0 secret trên linux/amd64. Full Ansible bootstrap trong ba container Ubuntu systemd dùng tmpfs **PASS**, cả ba K3s nodes Ready và lượt lặp có 0 changed trên mỗi host. Portal history qua Chromium đã hiển thị revision so sánh từ API Argo HTTPS thật với token chỉ đọc đúng Application. **R2 Local Runtime và E2E PASS** trong lab linux/amd64. R3 Hosted Integration có gate riêng. [Báo cáo R2](LOCAL_RUNTIME_ACCEPTANCE.md)
+
+Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
+
 The initialization baseline was recorded on 2026-11-26. P0.1–P0.2 rechecked the local refs and source. GitHub, GHCR, AWS and Kubernetes state can change independently.
 
 | Checkout | Baseline branch and HEAD | Starting worktree |

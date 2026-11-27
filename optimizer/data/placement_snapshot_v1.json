@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "mode": "simulation",
+  "capacity": {
+    "observed_at": "2026-11-26T12:00:00Z",
+    "pod_coverage": "all-namespaces",
+    "nodes": {
+      "apiVersion": "v1",
+      "kind": "NodeList",
+      "metadata": {},
+      "items": [
+        {
+          "metadata": {
+            "name": "worker-a",
+            "labels": {
+              "idp.example.com/region": "ap-southeast-1",
+              "topology.kubernetes.io/region": "us-east-1",
+              "topology.kubernetes.io/zone": "us-east-1a"
+            }
+          },
+          "spec": {},
+          "status": {
+            "allocatable": {
+              "cpu": "1",
+              "memory": "1Gi",
+              "pods": "10"
+            },
+            "conditions": [
+              {
+                "type": "Ready",
+                "status": "True"
+              }
+            ]
+          }
+        },
+        {
+          "metadata": {
+            "name": "worker-b",
+            "labels": {
+              "idp.example.com/region": "eu-west-1",
+              "topology.kubernetes.io/region": "us-east-1",
+              "topology.kubernetes.io/zone": "us-east-1a"
+            }
+          },
+          "spec": {},
+          "status": {
+            "allocatable": {
+              "cpu": "1",
+              "memory": "1Gi",
+              "pods": "10"
+            },
+            "conditions": [
+              {
+                "type": "Ready",
+                "status": "True"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "pods": {
+      "apiVersion": "v1",
+      "kind": "PodList",
+      "metadata": {},
+      "items": [
+        {
+          "metadata": {
+            "namespace": "kube-system",
+            "uid": "synthetic-operator-a"
+          },
+          "status": {
+            "phase": "Running"
+          },
+          "spec": {
+            "nodeName": "worker-a",
+            "containers": [
+              {
+                "name": "main",
+                "resources": {
+                  "requests": {
+                    "cpu": "60m",
+                    "memory": "32Mi"
+                  }
+                }
+              }
+            ],
+            "initContainers": [
+              {
+                "name": "sidecar",
+                "restartPolicy": "Always",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "40Mi"
+                  }
+                }
+              },
+              {
+                "name": "setup",
+                "resources": {
+                  "requests": {
+                    "cpu": "300m",
+                    "memory": "128Mi"
+                  }
+                }
+              }
+            ],
+            "overhead": {
+              "cpu": "10m",
+              "memory": "5Mi"
+            }
+          }
+        },
+        {
+          "metadata": {
+            "namespace": "kube-system",
+            "uid": "synthetic-operator-b"
+          },
+          "status": {
+            "phase": "Running"
+          },
+          "spec": {
+            "nodeName": "worker-b",
+            "containers": [
+              {
+                "name": "main",
+                "resources": {
+                  "requests": {
+                    "cpu": "150m",
+                    "memory": "112Mi"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "metadata": {
+            "namespace": "workloads",
+            "uid": "synthetic-completed-job"
+          },
+          "status": {
+            "phase": "Succeeded"
+          },
+          "spec": {
+            "nodeName": "worker-b",
+            "containers": [
+              {
+                "name": "batch",
+                "resources": {
+                  "requests": {
+                    "cpu": "1",
+                    "memory": "1Gi"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "reserve_by_node": {
+      "worker-a": {
+        "cpu_mcpu": 50,
+        "memory_mib": 64,
+        "pod_slots": 1
+      },
+      "worker-b": {
+        "cpu_mcpu": 50,
+        "memory_mib": 64,
+        "pod_slots": 1
+      }
+    }
+  },
+  "latency": {
+    "observed_at": "2026-11-26T12:00:00Z",
+    "rtt_ms_by_region": {
+      "ap-southeast-1": 45,
+      "eu-west-1": 95
+    }
+  },
+  "metrics": {
+    "observed_at": "2026-11-26T12:00:00Z",
+    "usage_by_node": {
+      "worker-a": {
+        "cpu_mcpu": 510,
+        "memory_mib": 306
+      },
+      "worker-b": {
+        "cpu_mcpu": 190,
+        "memory_mib": 150
+      }
+    }
+  },
+  "pricing": {
+    "observed_at": "2026-11-26T12:00:00Z",
+    "incremental_usd_per_replica_hour_by_region": {
+      "ap-southeast-1": 0.004,
+      "eu-west-1": 0.006
+    }
+  },
+  "workloads": [
+    {
+      "name": "workload-api",
+      "replicas": 2,
+      "cpu_mcpu_per_replica": 100,
+      "memory_mib_per_replica": 64,
+      "max_rtt_ms": 100,
+      "current_region": "ap-southeast-1",
+      "current_replicas": 2
+    },
+    {
+      "name": "background-worker",
+      "replicas": 1,
+      "cpu_mcpu_per_replica": 220,
+      "memory_mib_per_replica": 128,
+      "max_rtt_ms": 150
+    }
+  ],
+  "weights": {
+    "incremental_cost": 1,
+    "peak_pressure": 1,
+    "moved_replicas": 0.05
+  }
+}

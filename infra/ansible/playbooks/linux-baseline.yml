@@ -1,0 +1,42 @@
+---
+- name: Prepare dedicated Ubuntu lab hosts
+  hosts: k3s
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  tasks:
+    - name: Verify the approved lab OS, transport and address
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version in ['22.04', '24.04']
+          - ansible_facts.architecture in ['x86_64', 'aarch64']
+          - ansible_facts.service_mgr == 'systemd'
+          - ansible_connection == 'amazon.aws.aws_ssm'
+          - node_private_ip in ansible_facts.all_ipv4_addresses
+          - lab_environment is defined
+
+    - name: Install required packages from approved Ubuntu repositories
+      ansible.builtin.apt:
+        name: [ca-certificates, conntrack, curl, iptables, openssl, python3]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Persist forwarding for Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-gitops-platform-k3s.conf
+        content: "net.ipv4.ip_forward = 1\n"
+        mode: "0644"
+
+    - name: Inspect current forwarding before relying on the persisted value
+      ansible.builtin.command:
+        argv: [/sbin/sysctl, -n, net.ipv4.ip_forward]
+      register: k3s_forwarding
+      changed_when: false
+
+    - name: Reconcile runtime forwarding when it has drifted
+      ansible.builtin.command:
+        argv: [/sbin/sysctl, -p, /etc/sysctl.d/90-gitops-platform-k3s.conf]
+      when: k3s_forwarding.stdout | trim != '1'
+      changed_when: true

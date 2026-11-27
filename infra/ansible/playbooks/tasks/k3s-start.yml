@@ -1,0 +1,16 @@
+---
+- name: Render the approved node configuration
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/k3s-config.yaml.j2"
+    dest: /etc/rancher/k3s/gitops-platform.yaml
+    mode: "0600"
+  notify: Restart K3s
+
+- name: Apply pending service changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start K3s
+  ansible.builtin.systemd_service:
+    name: "{{ k3s_unit }}"
+    enabled: true
+    state: started

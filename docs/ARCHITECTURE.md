@@ -1,5 +1,7 @@
 # Architecture and repository contracts
 
+Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
+
 The workspace contains three independent Git checkouts. See [project state](PROJECT_STATE.md) for evidence and [development workflow](DEVELOPMENT_WORKFLOW.md) for the approval and rollback path.
 
 | Repository | Source landmarks | Dependencies |

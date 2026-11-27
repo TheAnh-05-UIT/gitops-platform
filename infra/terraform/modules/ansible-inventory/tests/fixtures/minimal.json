@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "environment": "lab",
+  "aws_region": "us-east-1",
+  "lab_profile": "minimal",
+  "connection_strategy": "ssm",
+  "nodes": {
+    "k3s-server": {
+      "logical_id": "k3s-server",
+      "role": "server",
+      "instance_id": "i-00000000000000001",
+      "private_ip": "10.20.1.10",
+      "public_ip": "192.0.2.10",
+      "availability_zone": "us-east-1a",
+      "simulated_region": "ap-southeast-1"
+    }
+  },
+  "groups": {
+    "k3s": [
+      "k3s-server"
+    ],
+    "k3s_server": [
+      "k3s-server"
+    ],
+    "k3s_agents": []
+  }
+}

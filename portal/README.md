@@ -1,0 +1,23 @@
+# Developer portal
+The Flask entry point is `portal.app:app`. The app requires HTTPS and a confidential OIDC client using Authorization Code, PKCE S256, nonce and single-use state. Launch with a production WSGI server through an approved private TLS endpoint. Flask's development server is suitable for local test use only. Open `/auth/login` to sign in.
+
+| Configuration | Purpose |
+| --- | --- |
+| `PORTAL_SESSION_SECRET` | Random session signing secret of at least 32 bytes. Keep it stable across workers and store it outside Git. Rotating it revokes sessions and pending proposals. |
+| `PORTAL_OIDC_ISSUER`, `PORTAL_OIDC_AUTHORIZE_URL`, `PORTAL_OIDC_TOKEN_URL` | Exact HTTPS provider endpoints on the issuer origin. This lab profile consumes ID tokens directly from the configured TLS token endpoint. |
+| `PORTAL_OIDC_CLIENT_ID`, `PORTAL_OIDC_CLIENT_SECRET`, `PORTAL_OIDC_REDIRECT_URI` | Confidential client, `client_secret_basic`, exact approved HTTPS callback ending at `/auth/callback` and RS256 token shape. |
+| `PORTAL_ACL_FILE` | Protected owner-managed JSON such as `{"subjects":{"fixture-sub":{"workload-api":"viewer"}}}`. Assign `deployer` explicitly for operators. RBAC is checked on every request. |
+| `GITOPS_CONFIG_REPO`, `PORTAL_GITHUB_READ_TOKEN` | Reviewed Config repository and read-only contents access for preview, history and freshness. |
+| `PORTAL_ARGO_ORIGIN`, `PORTAL_ARGO_READ_TOKEN` | Approved private HTTPS API and read-only App-scoped token for `workload-lab/workload-api`. The UI distinguishes compared revision, successful sync history and health. |
+| `PORTAL_GITHUB_TOKEN`, `PORTAL_GITHUB_BOT_ID`, `PORTAL_WRITES_ENABLED` | Short-lived reviewed installation credentials scoped to Config contents and PR proposals, numeric verified bot account ID and explicit disabled-by-default writer. Rerendered base, file contents, actor, freshness and branch provenance must match. |
+| `PORTAL_AUDIT_FILE` | Absolute protected append-only-by-application journal path. A write requires a durable intent entry before contacting GitHub. Create its parent directory with owner-only access and configure verified ACLs, rotation and retained export. |
+| `PORTAL_SNAPSHOT_FILE`, `PORTAL_SNAPSHOT_AS_OF` | Protected placement snapshot v1 and explicit replay timestamp for simulation only. With no file, portal uses the fixture. Snapshot observations get a five-minute freshness check. |
+| `PORTAL_ALLOW_SIMULATION_PROPOSALS` | Separate lab-only switch. Leave absent for real-capacity requests. |
+
+TLS, state, nonce, audience, issuance, expiry, issuer and stable subject checks apply at token exchange. The browser only receives signed session state. Rotate credentials using the service process's protected configuration and exclude callback query strings from server and proxy logs. Local logout clears the portal's browser session. Use the IdP logout separately when the shared SSO session must end. [OIDC code-flow ID token validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)
+
+Preview proposes only the fixed replica count and the simulated region selector in the approved Helm values file. HPA ownership or Argo source overrides cause a denial. The owner verifies the effective workload and absence of an external HPA before authorizing writes. The rollback action creates a new reviewable proposal for the fixed placement fields of a prior Config revision. Image rollback is a separate release procedure. [Image rollback](../docs/PROMOTION_RUNBOOK.md)
+
+Audit events include a pseudonymous subject, correlation ID, request type, result and public Git evidence where applicable. Before shared access, verify the IdP, HTTPS ingress, secret custody, signed cookie lifecycle, independent bot attribution, restricted `portal/workload-api-*` branch writes and retention in a reviewed audit sink. Local application append-only behavior remains subject to host administrator access. For failed branch or PR operations, preserve the correlation ID and inspect the bot branch and scope before retry. A proposed PR still requires independent review and GitOps approval. The end user must not have authority to enable the writer, approve their own proposal or deploy directly.
+
+Placement and rollback use CPU/memory requests and the current selector from the exact Git base. An observed snapshot must include the same config_revision. A placement rollback requires feasible capacity at the historical selector, using the documented RTT bound in the reviewed snapshot. On confirmation journal failure, the response retains the PR and the same signed request for reconciliation before expiry.

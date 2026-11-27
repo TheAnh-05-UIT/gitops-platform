@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "environment": "lab",
+  "aws_region": "us-east-1",
+  "lab_profile": "private",
+  "connection_strategy": "ssm",
+  "nodes": {
+    "k3s-server": {
+      "logical_id": "k3s-server",
+      "role": "server",
+      "instance_id": "i-00000000000000001",
+      "private_ip": "10.20.2.10",
+      "public_ip": null,
+      "availability_zone": "us-east-1a",
+      "simulated_region": null
+    },
+    "k3s-agent1": {
+      "logical_id": "k3s-agent1",
+      "role": "worker",
+      "instance_id": "i-00000000000000002",
+      "private_ip": "10.20.2.11",
+      "public_ip": null,
+      "availability_zone": "us-east-1a",
+      "simulated_region": "ap-southeast-1"
+    },
+    "k3s-agent2": {
+      "logical_id": "k3s-agent2",
+      "role": "worker",
+      "instance_id": "i-00000000000000003",
+      "private_ip": "10.20.2.12",
+      "public_ip": null,
+      "availability_zone": "us-east-1a",
+      "simulated_region": "ap-southeast-1"
+    }
+  },
+  "groups": {
+    "k3s": [
+      "k3s-agent1",
+      "k3s-agent2",
+      "k3s-server"
+    ],
+    "k3s_server": [
+      "k3s-server"
+    ],
+    "k3s_agents": [
+      "k3s-agent1",
+      "k3s-agent2"
+    ]
+  }
+}

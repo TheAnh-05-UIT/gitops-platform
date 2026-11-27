@@ -1,0 +1,4 @@
+/inventories/aws/hosts.ini
+/inventories/aws/
+inventory*.json
+ansible_inventory*.json

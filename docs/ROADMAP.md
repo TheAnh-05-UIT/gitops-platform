@@ -1,5 +1,7 @@
 # Development roadmap
 
+Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
+
 Use the [observed baseline](PROJECT_STATE.md) and [contracts](ARCHITECTURE.md) when opening work. Priority order reflects delivery dependencies. Apply P6 tests with the milestone that introduces the behavior.
 
 | Order | Current state | Required change and owners | Dependencies | Acceptance criteria | Risks |

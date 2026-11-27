@@ -1,0 +1,13 @@
+{
+  "aws_region": "us-east-1",
+  "availability_zone": "us-east-1a",
+  "ami": {
+    "id": "ami-00000000000000000"
+  },
+  "cost_allocation": {
+    "owner": "platform-lab",
+    "cost_center": "engineering-lab"
+  },
+  "lab_profile": "multi-node",
+  "worker_count": 1
+}

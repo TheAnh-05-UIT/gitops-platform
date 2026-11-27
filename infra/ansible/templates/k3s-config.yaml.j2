@@ -1,0 +1,13 @@
+node-name: {{ inventory_hostname | to_json }}
+node-ip: {{ node_private_ip | to_json }}
+{% if k3s_mode == 'server' %}
+write-kubeconfig-mode: "0600"
+agent-token-file: /etc/rancher/k3s/gitops-platform-agent-password
+flannel-backend: vxlan
+disable:
+  - traefik
+  - servicelb
+{% else %}
+server: "https://{{ hostvars[k3s_server_id].node_private_ip }}:6443"
+token-file: /etc/rancher/k3s/gitops-platform-agent-token
+{% endif %}

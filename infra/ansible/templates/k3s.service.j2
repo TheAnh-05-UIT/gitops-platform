@@ -1,0 +1,21 @@
+[Unit]
+Description=GitOps Platform K3s {{ k3s_mode }}
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart={{ k3s_binary }} {{ k3s_mode }} --config /etc/rancher/k3s/gitops-platform.yaml
+KillMode=process
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+TasksMax=infinity
+Restart=always
+RestartSec=5s
+TimeoutStartSec=180s
+
+[Install]
+WantedBy=multi-user.target

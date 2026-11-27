@@ -7,34 +7,33 @@
   </head>
   <body>
     <main>
+      <p><a href="{{ url_for('catalog') }}">Danh mục dịch vụ</a> · <a href="{{ url_for('history') }}">Lịch sử triển khai</a></p>
       <h1>Cập nhật workload-api</h1>
 
       {% if error %}
       <p role="alert">{{ error }}</p>
       {% endif %}
 
-      {% if rejected %}
+      {% if evidence %}
+      <p>Nguồn dữ liệu: {{ evidence.source_mode }}.</p>
+      {% set selected = evidence.workloads.get('workload-api') %}
+      {% if selected %}
+      <p>Vùng đề xuất {{ selected.placement_region }}, {{ selected.replicas }} replica, RTT {{ selected.rtt_ms }} ms.</p>
+      {% endif %}
       <ul>
-        {% for region, reasons in rejected.items() %}
-        <li><strong>{{ region }}</strong>: {{ reasons | join(", ") }}</li>
+        {% for node, reasons in evidence.rejections.get('workload-api', {}).items() if reasons %}
+        <li>{{ node }}: {{ reasons | join(", ") }}</li>
         {% endfor %}
       </ul>
       {% endif %}
 
-      {% if placement %}
-      <section aria-labelledby="placement-heading">
-        <h2 id="placement-heading">Kết quả tối ưu</h2>
-        <dl>
-          <dt>Region được chọn</dt>
-          <dd>{{ placement.region }}</dd>
-
-          <dt>RTT giả lập</dt>
-          <dd>{{ placement.rtt_ms }} ms</dd>
-
-          <dt>Chi phí ước tính</dt>
-          <dd>{{ placement.estimated_cost_usd_per_hour }} USD/giờ</dd>
-        </dl>
-      </section>
+      {% if diff %}<h2>Thay đổi đề xuất</h2><pre>{{ diff }}</pre>{% endif %}
+      {% if proposal %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="proposal" value="{{ proposal }}">
+        <button name="action" value="submit">Gửi đề xuất để review</button>
+      </form>
       {% endif %}
 
       {% if notice %}
@@ -49,6 +48,7 @@
       </p>
       {% endif %}
 
+      {% if can_request or request.method == 'POST' %}
       <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -77,8 +77,9 @@
           >
         </p>
 
-        <button type="submit">Tạo PR</button>
+        <button name="action" value="preview">Xem trước</button>
       </form>
+      {% endif %}
     </main>
   </body>
 </html>
