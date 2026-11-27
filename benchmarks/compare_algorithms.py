@@ -1,22 +1,17 @@
 import argparse
 import json
-from dataclasses import dataclass
-from itertools import product
-from math import isclose, prod
+from collections import Counter
+from datetime import datetime, timezone
+from math import ceil, isclose, isfinite, prod
+from pathlib import Path
 from statistics import median
 from time import perf_counter
 
 import pulp
 
 from optimizer.ilp import read_csv
-
-
-@dataclass
-class PlacementModel:
-    demands: dict
-    capacities: dict
-    candidates: dict
-    costs: dict
+from optimizer.placement import PlacementModel, score, solve_exhaustive, solve_greedy, solve_ilp
+from optimizer.snapshot import StaleSnapshot, build_snapshot_model, explain, timestamp
 
 
 def build_model(copies, scenario):
@@ -68,194 +63,120 @@ def build_model(copies, scenario):
     return PlacementModel(demands, capacities, candidates, costs)
 
 
-def score(model, placement):
-    """Return the cost of a complete, valid placement."""
-    if placement.keys() != model.demands.keys():
-        return None
-
-    usage = {region: [0, 0] for region in model.capacities}
-    total_cost = 0.0
-
-    for service, region in placement.items():
-        if region not in model.candidates[service]:
-            return None
-
-        cpu, memory = model.demands[service]
-        used = usage[region]
-        used[0] += cpu
-        used[1] += memory
-
-        total_cpu, total_memory = model.capacities[region]
-        if used[0] > total_cpu or used[1] > total_memory:
-            return None
-
-        total_cost += model.costs[service, region]
-
-    return total_cost
-
-
-def solve_greedy(model):
-    remaining = {
-        region: list(capacity) for region, capacity in model.capacities.items()
-    }
-    placement = {}
-    services = sorted(
-        model.demands,
-        key=lambda service: (len(model.candidates[service]), service),
-    )
-
-    for service in services:
-        cpu, memory = model.demands[service]
-        regions = sorted(
-            model.candidates[service],
-            key=lambda region: (model.costs[service, region], region),
-        )
-
-        for region in regions:
-            available = remaining[region]
-            if cpu <= available[0] and memory <= available[1]:
-                placement[service] = region
-                available[0] -= cpu
-                available[1] -= memory
-                break
-        else:
-            return "NoSolutionFound", None
-
-    return "Feasible", placement
-
-
-def solve_exhaustive(model, max_combinations):
-    services = list(model.demands)
-    options = [model.candidates[service] for service in services]
-
-    if prod(len(regions) for regions in options) > max_combinations:
-        return "SkippedCombinationLimit", None
-
-    best_placement = None
-    best_cost = float("inf")
-
-    for regions in product(*options):
-        placement = dict(zip(services, regions))
-        cost = score(model, placement)
-        if cost is not None and cost < best_cost:
-            best_placement = placement
-            best_cost = cost
-
-    if best_placement is None:
-        return "Infeasible", None
-
-    return "Optimal", best_placement
-
-
-def solve_ilp(model):
-    if any(not options for options in model.candidates.values()):
-        return "Infeasible", None
-
-    problem = pulp.LpProblem("multi_service_placement", pulp.LpMinimize)
-    selected = {
-        pair: pulp.LpVariable(f"select_{index}", cat="Binary")
-        for index, pair in enumerate(model.costs)
-    }
-
-    for service, regions in model.candidates.items():
-        problem += pulp.lpSum(selected[service, region] for region in regions) == 1
-
-    for region, (total_cpu, total_memory) in model.capacities.items():
-        terms = [
-            (model.demands[service], variable)
-            for (service, target), variable in selected.items()
-            if target == region
-        ]
-        problem += pulp.lpSum(cpu * var for (cpu, _), var in terms) <= total_cpu
-        problem += pulp.lpSum(memory * var for (_, memory), var in terms) <= total_memory
-
-    problem += pulp.lpSum(
-        model.costs[pair] * variable for pair, variable in selected.items()
-    )
-
-    status = pulp.LpStatus[problem.solve(pulp.PULP_CBC_CMD(msg=False))]
-    if status != "Optimal":
-        return status, None
-
-    placement = {
-        service: region
-        for (service, region), variable in selected.items()
-        if pulp.value(variable) > 0.5
-    }
-    return status, placement
-
-
-def benchmark(model, solver, repeats):
+def benchmark(model, solver, repeats, snapshot=None):
     samples = []
-
+    statuses = Counter()
     for _ in range(repeats):
         start = perf_counter()
         status, placement = solver()
         samples.append((perf_counter() - start) * 1000)
+        statuses[status] += 1
+        objective = score(model, placement) if placement is not None else None
+        if placement is not None and objective is None:
+            raise RuntimeError("Solver returned an invalid placement.")
 
-    cost = score(model, placement) if placement is not None else None
-    if placement is not None and cost is None:
-        raise RuntimeError("Solver returned an invalid placement.")
-
-    return {
+    skipped = status.startswith("Skipped")
+    result = {
         "status": status,
         "placement": placement,
-        "estimated_cost_usd_per_hour": cost,
-        "median_ms": None if status.startswith("Skipped") else median(samples),
+        "statuses": statuses,
+        "median_ms": None if skipped else median(samples),
+        "p95_ms": None if skipped else sorted(samples)[ceil(0.95 * len(samples)) - 1],
     }
+    if snapshot is None:
+        result["estimated_cost_usd_per_hour"] = objective
+    else:
+        result["objective"] = objective
+        result["explanation"] = explain(snapshot, placement)
+    return result
+
+
+def compare(results, objective_field):
+    ilp = results["ilp"]
+    exact = results["exhaustive"]
+    greedy = results["greedy"]
+    if exact["status"] == "Infeasible" and any(
+        result["placement"] is not None for result in (ilp, greedy)
+    ):
+        raise RuntimeError("A solver returned a placement for an infeasible model.")
+    if exact["status"] == "Optimal" and ilp["status"] == "Infeasible":
+        raise RuntimeError("ILP and exhaustive search disagree on feasibility.")
+    if exact["status"] == ilp["status"] == "Optimal" and not isclose(
+        ilp[objective_field], exact[objective_field], abs_tol=1e-9,
+    ):
+        raise RuntimeError("ILP and exhaustive search disagree on the optimal objective.")
+    optimum = next((result[objective_field] for result in (exact, ilp)
+                    if result["status"] == "Optimal"), None)
+    if optimum is None:
+        return
+    for name, result in (("ilp", ilp), ("greedy", greedy)):
+        objective = result[objective_field]
+        if objective is None:
+            continue
+        if objective < optimum and not isclose(objective, optimum, abs_tol=1e-9):
+            raise RuntimeError(f"{name} reports a better score than the proven optimum.")
+        if optimum > 0:
+            result["gap_percent"] = round(100 * (objective - optimum) / optimum, 4)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", choices=("baseline", "infeasible"), default="baseline")
     parser.add_argument("--copies", type=int, default=1)
+    parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--as-of", help="ISO 8601 evaluation time. Defaults to the current UTC time.")
+    parser.add_argument("--max-age-seconds", type=int, default=300)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--max-combinations", type=int, default=100_000)
+    parser.add_argument("--time-limit-seconds", type=float, default=30)
     args = parser.parse_args()
 
-    if min(args.copies, args.repeats, args.max_combinations) < 1:
-        parser.error("Copies, repeats and max combinations must be positive.")
+    if min(args.copies, args.repeats, args.max_combinations, args.max_age_seconds) < 1:
+        parser.error("Copies, repeats, maximum combinations and freshness limit must be positive.")
+    if not isfinite(args.time_limit_seconds) or args.time_limit_seconds <= 0:
+        parser.error("The ILP time limit must be positive and finite.")
+    if args.snapshot and (args.copies != 1 or args.case != "baseline"):
+        parser.error("CSV cases and copies cannot be combined with a snapshot.")
+    if args.as_of and not args.snapshot:
+        parser.error("An evaluation time requires a snapshot.")
 
-    model = build_model(args.copies, args.case)
+    snapshot = None
+    if args.snapshot:
+        try:
+            snapshot = build_snapshot_model(
+                json.loads(args.snapshot.read_text(encoding="utf-8")),
+                timestamp(args.as_of) if args.as_of else datetime.now(timezone.utc),
+                args.max_age_seconds,
+            )
+        except StaleSnapshot as error:
+            print(json.dumps({"case": "snapshot", "status": "StaleSnapshot", "reason": str(error)}))
+            return 2
+        except (ValueError, OSError) as error:
+            parser.error(str(error))
+    model = snapshot.model if snapshot is not None else build_model(args.copies, args.case)
     results = {
-        "ilp": benchmark(model, lambda: solve_ilp(model), args.repeats),
-        "greedy": benchmark(model, lambda: solve_greedy(model), args.repeats),
+        "ilp": benchmark(
+            model, lambda: solve_ilp(model, args.time_limit_seconds), args.repeats, snapshot,
+        ),
+        "greedy": benchmark(model, lambda: solve_greedy(model), args.repeats, snapshot),
         "exhaustive": benchmark(
-            model,
-            lambda: solve_exhaustive(model, args.max_combinations),
-            args.repeats,
+            model, lambda: solve_exhaustive(model, args.max_combinations), args.repeats, snapshot,
         ),
     }
-
-    ilp = results["ilp"]
-    exhaustive = results["exhaustive"]
-    if exhaustive["status"] in ("Optimal", "Infeasible"):
-        if ilp["status"] != exhaustive["status"]:
-            raise RuntimeError("ILP and Exhaustive Search disagree on the status.")
-        if ilp["status"] == "Optimal" and not isclose(
-            ilp["estimated_cost_usd_per_hour"],
-            exhaustive["estimated_cost_usd_per_hour"],
-            abs_tol=1e-9,
-        ):
-            raise RuntimeError("ILP and Exhaustive Search disagree on optimal cost.")
-
-    optimal_cost = ilp["estimated_cost_usd_per_hour"]
-    greedy_cost = results["greedy"]["estimated_cost_usd_per_hour"]
-    if optimal_cost is not None and optimal_cost > 0 and greedy_cost is not None:
-        results["greedy"]["gap_percent"] = round(
-            100 * (greedy_cost - optimal_cost) / optimal_cost, 4
-        )
-
+    compare(results, "objective" if snapshot is not None else "estimated_cost_usd_per_hour")
     print(json.dumps({
-        "case": args.case,
-        "services": len(model.demands),
-        "candidate_assignments": prod(
-            len(options) for options in model.candidates.values()
-        ),
+        "case": "snapshot" if snapshot is not None else args.case,
+        "services": len(set(model.groups.values())) if model.groups else len(model.demands),
+        "placement_units": len(model.demands),
+        "candidate_assignments": prod(len(options) for options in model.candidates.values()),
         "repeats": args.repeats,
+        "solver": {"pulp_version": pulp.__version__, "cbc_threads": 1, "cbc_seed": 1,
+                   "cbc_time_limit_seconds": args.time_limit_seconds,
+                   "exhaustive_max_combinations": args.max_combinations},
         "results": results,
     }, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
