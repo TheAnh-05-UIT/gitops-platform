@@ -2,7 +2,7 @@
 
 ## Kết quả sau khi khôi phục quyền ngày 2026-11-27
 
-**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Ảnh Workload Alpine đã qua gate Trivy trong lượt tiếp theo. Bằng chứng lần đầu dừng Ansible ở ngưỡng đĩa dự phòng được giữ bên dưới. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
+**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Ảnh Workload Alpine đã qua gate Trivy trong lượt tiếp theo. Lượt Ansible tiếp theo đã bootstrap đủ ba node và idempotent. Bằng chứng lần đầu dừng ở ngưỡng đĩa dự phòng được giữ bên dưới. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
 
 | Hạng mục | Kết quả và bằng chứng |
 | --- | --- |
@@ -10,7 +10,7 @@
 | R2.1 Công cụ | **PASS.** Các binary đã kiểm nằm trong `.r2-runtime-tools/bin` ở workspace cha. Helm 4.3.2, k3d 5.8.3, Trivy 0.76.2, Gitleaks 8.30.1, actionlint 1.7.12, k6 2.4.0, promtool 3.16.0 và Alloy 1.22.0 được đối chiếu SHA256 với checksum hoặc release metadata. Playwright 1.65.2 và Chromium Headless Shell 159.0.8154.6 chạy với browser sandbox bật và thư viện Ubuntu giải nén cục bộ. |
 | R1-12 Reproducibility | **PASS phạm vi linux/amd64.** Workload `b0ddbba334fd1422540a0369215f0ed225770548` pin OCI index `sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b` và Linux manifest đã pull `sha256:4a68d3169325c47e1bafbb86425220f03fbdff6f079a419e8d39407183288217`. Chín dependency được giải trên CPython 3.12 Linux, hash khớp PyPI và Docker build thành công với `--require-hashes --only-binary=:all:`. Các kiến trúc khác chưa build. |
 | R2.2 Ảnh Linux và scan lần đầu | **PASS build/runtime. FAIL vulnerability gate trên Trixie.** Docker image ID `sha256:dfbce3b3b8c3abc7962980c747eb3ec09d9d1be9e07dd17968b9a67b111669dd`, UID/GID 10001, health/identity/RED metrics đạt, SIGTERM exit 0. Trivy quét đúng local tag, 54 HIGH, 0 CRITICAL và 0 secret. Một mục có bản sửa trong dữ liệu Trivy (`libzstd1`), 53 mục không có phiên bản vá ghi nhận. Ảnh Bookworm đối chứng có 100 HIGH và 2 CRITICAL. SBOM CycloneDX 1.7 có 98 thành phần. |
-| R2.3 Ansible | **PASS** local connection và chuẩn bị node Linux cô lập. `k3s-node.yml` chạy trên Ubuntu 24.04 với Docker transport, xác minh checksum binary K3s, tạo ownership marker và render systemd unit. Hai lượt có `changed=4` và `changed=0`, đều `failed=0`. **BLOCKED** cho bootstrap đầy đủ hai lượt. Lab dùng bản sao playbook thay duy nhất assertion transport sang Docker, cài `iproute2` để thu facts và dùng K3s drop-in `snapshotter: native` sau khi nested overlayfs bị từ chối. Systemd server và worker đầu đều Ready với K3s v1.36.1+k3s1. Worker thứ hai đã nhận token TLS-pinned và bắt đầu handler khởi động khi guard dừng lab. Kiểm tra toàn topology và lượt thứ hai chưa chạy xong. |
+| R2.3 Ansible | **PASS** local connection và chuẩn bị node Linux cô lập. `k3s-node.yml` chạy trên Ubuntu 24.04 với Docker transport, xác minh checksum binary K3s, tạo ownership marker và render systemd unit. Hai lượt có `changed=4` và `changed=0`, đều `failed=0`. **BLOCKED** ở lần bootstrap đầu. Lab dùng bản sao playbook thay duy nhất assertion transport sang Docker, cài `iproute2` để thu facts và dùng K3s drop-in `snapshotter: native` sau khi nested overlayfs bị từ chối. Systemd server và worker đầu đều Ready với K3s v1.36.1+k3s1. Worker thứ hai đã nhận token TLS-pinned và bắt đầu handler khởi động khi guard dừng lab. Lượt tiếp theo đã hoàn tất theo phần kiểm lại Ansible bên dưới. |
 | R2.4 Kubernetes | **PASS.** k3d `idp-r2-accept` có một server, hai worker, cả ba Ready với k3s v1.36.1+k3s1. Hai workload replicas chạy trên hai worker có nhãn vùng mô phỏng. Helm lint, render và deployment policy đạt. Ingress TLS trả JSON qua chứng chỉ lab đã tin cậy, `/metrics` trên ingress trả 404 theo route exact `/`, health nội bộ trả 200. Probes, requests/limits, PDB và HPA từ chart được triển khai thực. |
 | R2.5 Argo CD | **PASS.** Argo CD 3.6.3 dùng Git Smart HTTP chỉ đọc trong cụm. Baseline `4c40b5cfe1a674568e3970a892e104d12b89a575` Synced/Healthy, drift replicas 2→1 được self-heal về 2. Revision thử HPA `725d036ad06123f6f71a8d61051d9de8e79043f1` Synced/Healthy. Revert `bb0c5559c93acb4c8be395e7bdb642e8b764cf59` xóa HPA, trả về hai replicas và cùng Git tree với baseline. |
 | R2.6 Observability | **PASS thu thập, truy vấn và alert thực.** kube-prometheus-stack 85.0.0 và Loki 18.7.6 khớp SHA256 của upstream release, hai workload targets UP, RED request counter quan sát được, Grafana dashboard `workload-api-red` có ba panel. Alloy gửi 20 mẫu sự kiện đã lọc sang Loki, Grafana truy vấn được datasource Loki. Alertmanager nhận alert kiểm thử do Prometheus gửi. Sửa route Alertmanager kế thừa receiver `null` bị thiếu và xử lý ký tự xuống dòng trong log CRI. Release Loki cài cục bộ dùng tên `workload-logs` nên selector mặc định `lab-loki` ban đầu không chọn Pod. Render với release name trong runbook có selector khớp. Sau khi sửa selector riêng trong lab, Grafana proxy tới Loki `/ready` thành công và Pod ngoài namespace bị từ chối kết nối. Cả hai ca chạy sau khi khởi động lại k3d. Footprint tại một mẫu metrics là 68 mCPU và 866 MiB cho mười Pod observability. |
@@ -26,11 +26,22 @@ Workload `1fa207eddc775a10c39619fd9bbec162ef017d89` dùng CPython 3.12 trên Alp
 
 **PASS** Trivy với cùng ngưỡng HIGH/CRITICAL và scanner secret trên ảnh `sha256:49ddf1a4d577ad638dbe54d1fa4bdfcfbce11d7b372ef10ff59c3578d0cb0192`. Scan trả exit 0, 0 HIGH/CRITICAL, 0 secret và 49 thành phần CycloneDX 1.7. Ảnh giữ UID/GID 10001, qua 6/6 runtime tests, HTTP health/identity/metrics và SIGTERM exit 0. Trạng thái musl được xác minh trên linux/amd64. Argo CD đồng bộ Git lab revision `f392cf20d93d76887cf8f3c7d358e6770c99f3de` và báo Synced/Healthy. Cả hai Pod Ready trên đúng config digest `sha256:9616c9a2e073df314544dd63f71d4cbc7b6a53dd386e07092a01ddca1451b973` từ log build. Service trả health và identity qua port-forward.
 
+### Ansible full bootstrap và idempotency kiểm lại
+
+**PASS** với Ubuntu 24.04.5 và systemd ở ba container cô lập. Lượt kiểm dùng bản sao playbook chỉ đổi assertion transport từ SSM thành `community.docker.docker`. `iproute2` được cài sẵn cho network facts. Cả ba node dùng `snapshotter: native` và tmpfs 768 MiB tại `/var/lib/rancher` để giảm ghi đĩa Windows. Các addon mặc định của cấu hình K3s được giữ. K3s v1.36.1+k3s1 lấy từ upstream theo SHA256, hai worker join qua TLS-pinned token và nhận nhãn `ap-southeast-1`. Control plane và hai worker đều Ready.
+
+| Lượt chạy | Server | Worker 0 | Worker 1 |
+| --- | --- | --- | --- |
+| Bootstrap | 40 ok, 11 changed, 0 failed | 22 ok, 9 changed, 0 failed | 22 ok, 9 changed, 0 failed |
+| Idempotency | 39 ok, 0 changed, 0 failed | 23 ok, 0 changed, 0 failed | 23 ok, 0 changed, 0 failed |
+
+Ba container kiểm thử đã dừng sau khi lấy bằng chứng. Kiểm thử Ansible dùng Docker transport cục bộ. AWS SSM và vận hành cloud nằm ngoài phạm vi.
+
 ### Ngưỡng đĩa và trạng thái bàn giao
 
 `df -B1 --output=avail /mnt/c` được lấy mẫu khi chạy load và bootstrap. Ngưỡng dừng sớm là 17 GiB để giữ mức tối thiểu 15 GiB. Ansible dừng khi mẫu còn 18.042.568.704 byte, khoảng 16,80 GiB. Sau dừng, C còn 17.438.568.448 byte, khoảng 16,24 GiB. Các container Ansible của lần chạy đã dừng. k3d `idp-r2-accept` đã dừng và được giữ để tái lập. So sánh danh sách trước và sau xác nhận đủ 12 volume gốc.
 
-Để đánh giá lại R3, cần chạy lại full bootstrap và lượt idempotency với đĩa đủ dư. Portal history dùng hợp đồng Argo/GitHub chuẩn và chưa có bằng chứng tích hợp thật trong lần chạy này.
+Đang kiểm tra Portal history qua hợp đồng Argo/GitHub chuẩn. Các bước hosted và AWS thuộc gate riêng.
 
 ## Checkpoint ban đầu
 

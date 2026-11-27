@@ -77,3 +77,7 @@ Xem [ma trận R2](LOCAL_RUNTIME_ACCEPTANCE.md) để đối chiếu phạm vi c
 Ảnh từ Workload `1fa207e` xây trên linux/amd64 với OCI digest và musllinux wheel hash. **PASS** Trivy 0 HIGH, 0 CRITICAL, 0 secret, CycloneDX có 49 thành phần. `pip check`, 6/6 runtime tests, HTTP health/identity/metrics và SIGTERM đều đạt. Ảnh Alpine chưa vá trước đó có 16 HIGH của `krb5-libs`.
 
 Argo CD đồng bộ revision lab `f392cf2` và triển khai hai Pod Ready của đúng ảnh đã quét. Health và identity qua Service trả HTTP 200.
+
+### R2 kiểm lại Ansible trên systemd
+
+Docker transport với Ubuntu 24.04.5, K3s v1.36.1+k3s1, native snapshotter và tmpfs riêng. **PASS** full playbook với 11/9/9 thay đổi trên server/worker/worker. Ba node Ready, cả hai worker có nhãn vùng mô phỏng. Chạy lại cùng inventory cho 0 thay đổi, 0 lỗi trên cả ba host. Xem điều kiện của lab trong [nghiệm thu R2](LOCAL_RUNTIME_ACCEPTANCE.md#ansible-full-bootstrap-và-idempotency-kiểm-lại).

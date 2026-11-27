@@ -33,6 +33,6 @@ Vị trí gốc, mức độ, tác động và tái hiện chi tiết của R1 g
 | R2-03 · Alertmanager route | **FAIL → PASS** | Operator từ chối `undefined receiver "null" used in route` khi Helm kế thừa nested route. Config `dfd3486` khai báo `routes: []`, render và ca regression đạt. StatefulSet Ready và nhận alert do Prometheus gửi. |
 | R2-04 · Alloy CRI log framing | **FAIL → PASS** | Alloy follow Pod logs nhưng trước sửa mọi dòng bị lọc, Loki trả 0. Config `b235d28` nhận CR/LF cuối dòng trong bộ lọc và regex nhưng chỉ ghi sự kiện allowlist đã trích xuất. Regression, Alloy validate và mẫu 20 sự kiện Loki đạt. |
 | R2-05 · Workload base OS vulnerability | **FAIL → PASS linux/amd64** | Trixie 54 HIGH. Bookworm 100 HIGH và 2 CRITICAL. Workload `1fa207e` chuyển sang Alpine được pin, khóa musllinux hashes và pin `krb5-libs=1.22.3-r0`. Ảnh build lại qua Trivy với 0 HIGH, 0 CRITICAL, 0 secret và có SBOM. |
-| R2-06 · Ansible full runtime | **BLOCKED disk** | Đã vượt lỗi overlayfs lồng trong Docker bằng drop-in native riêng của lab. Server và một worker Ready. Dừng sớm ở khoảng 16,80 GiB trống khi worker thứ hai khởi động, trước lượt idempotency đầy đủ. |
+| R2-06 · Ansible full runtime | **BLOCKED disk → PASS lab** | Lần đầu dừng sớm khi worker thứ hai khởi động. Lượt kế tiếp dùng tmpfs cục bộ và snapshotter native. Server và hai worker đều Ready, định danh/nhãn qua kiểm tra, lượt lặp 0 changed và 0 failed trên cả ba host. |
 
 [Xem ma trận nghiệm thu và lệnh tái lập](LOCAL_RUNTIME_ACCEPTANCE.md)
