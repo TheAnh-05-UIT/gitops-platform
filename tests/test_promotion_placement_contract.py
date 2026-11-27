@@ -1,6 +1,7 @@
 """Exercise the real Portal YAML patcher against Config promotion guards."""
 
 import base64
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,7 +11,7 @@ from unittest.mock import patch
 
 from portal.github_client import create_placement_pull_request
 
-CONFIG = Path(__file__).resolve().parents[2] / "gitops-platform-config"
+CONFIG = Path(os.environ.get("PLATFORM_CONFIG_CHECKOUT", Path(__file__).resolve().parents[2] / "gitops-platform-config"))
 sys.path.insert(0, str(CONFIG))
 
 from scripts.promotion_policy import (  # sibling checkout contract
