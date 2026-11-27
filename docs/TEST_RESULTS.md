@@ -35,3 +35,23 @@ Chạy CLI từ Platform, lặp 7 lần mỗi case. Báo thời gian median cụ
 | Infeasible | Infeasible · 0,001 ms | NoSolutionFound · 0,003 ms | Infeasible · 0,001 ms |
 
 Greedy lệch 8% ở baseline và 1,934% ở snapshot, theo mục tiêu từng mô hình. Các ca CPU/memory không đủ, vùng không tương thích, stale metrics và multi-workload được kiểm bằng fixture, không có phép đo tiết kiệm AWS. [Kế hoạch và lệnh](TEST_PLAN.md)
+
+## Kết quả bổ sung R2
+
+Bảng này ghi phép đo mới trong WSL2. Các số P0–P7 ở trên là hồ sơ lịch sử và không được cộng vào kết quả R2.
+
+| Cách chạy | Kết quả trong R2 |
+| --- | --- |
+| `python3 -B -m unittest discover -s tests -p 'test_ansible*.py' -v` tại Platform | **PASS** 8/8, gồm regression phân giải đường dẫn của cả hai template. Môi trường Python dùng PyYAML/Jinja2 có sẵn từ Ansible pipx. |
+| `render_inventory.py` và `ansible-inventory -i <fixture-output> --graph` | **PASS** cả ba profile, lần lượt 0, 1, 2 agents. |
+| `ansible-playbook -i <private-fixture> <playbook> --syntax-check` | **PASS** linux-baseline và bootstrap-lab. |
+| `ansible-lint --offline --project-dir "$PWD" infra/ansible/playbooks/{linux-baseline,bootstrap-lab}.yml` | **FAIL** ban đầu (exit 2, hai `no-relative-paths`). **PASS** sau sửa (exit 0, 5 file, profile production). |
+| `ansible localhost -i localhost, -c local -m ansible.builtin.ping` | **BLOCKED**, lỗi khởi động local RPC. |
+| `python3 -B -m unittest discover -s tests -p test_k3s_restore_rehearsal.py` tại Platform | **PASS** 7/7 fixture. Chưa restore trên cụm. |
+| `python3 -B -m unittest discover -s tests -p test_cross_repo_release.py` tại Platform | **PASS** hai ca, một ca skip. Biến `PLATFORM_CONFIG_CHECKOUT` và `PLATFORM_WORKLOAD_CHECKOUT` trỏ worktree R2. |
+| `python3 -B -m unittest discover -s tests -p test_workflow_security.py` tại Workload | **PASS** 5/5. |
+| `python3 -B -m unittest discover -s tests -p test_observability.py` tại Config | **PASS** 3 ca tĩnh. Một ca **BLOCKED** bởi `FileNotFoundError: helm`, khiến lệnh đầy đủ trả exit 1. Ba ca tĩnh chạy lại riêng đều exit 0. |
+| `python3 -B -m unittest discover -s tests -p test_snapshot_capture.py -v` tại Platform | **BLOCKED** tại import `pulp`, chưa thực thi ca snapshot. |
+| `terraform -chdir=infra/terraform fmt -check -recursive` tại Platform | **PASS** exit 0. Provider init, plan và các thao tác AWS **NOT RUN**. |
+
+Các phép kiểm build, scan, cluster, Argo CD, portal/ILP, observability và E2E còn lại được phân loại theo từng pha trong [nghiệm thu R2](LOCAL_RUNTIME_ACCEPTANCE.md).

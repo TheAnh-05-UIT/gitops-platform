@@ -21,3 +21,14 @@ Vị trí gốc, mức độ, tác động và tái hiện chi tiết của R1 g
 
 - **R2-01 · MEDIUM · Workload.** Bản sửa đầu dùng pin Action thiếu ký tự trong `.github/workflows/ci.yml`. Test liên repo từ chối; đã đối chiếu commit đầy đủ của phiên bản 6.2.0 và sửa pin. Kiểm tra 40 ký tự ở cả ba ứng viên đạt. [Release setup-python](https://github.com/actions/setup-python/releases/tag/v6.2.0)
 - **R2-02 · INFORMATIONAL · Môi trường.** Docker CLI không kết nối daemon, WSL access denied, thiếu k3d/Ansible và scanner. Tái hiện bằng client-only version và công cụ liệt kê. Chặn container, Ansible và Kubernetes runtime. Không khởi động lại dịch vụ hoặc thay đổi cấu hình host.
+
+## R2 Local Runtime
+
+| Mục | Trạng thái | Bằng chứng |
+| --- | --- | --- |
+| Template Ansible dùng đường dẫn tương đối | **FAIL** trên ứng viên, **PASS** sau sửa `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae` | Lint 26.11.1 chặn hai `no-relative-paths` ở `k3s-node.yml`, `k3s-start.yml`. Neo nguồn template vào thư mục playbook. Regression kiểm tra cả hai đường dẫn mở được. Sau sửa syntax 2/2, test 8/8 và lint sạch. |
+| R1-12 | **OPEN / BLOCKED** | Tái hiện từ Dockerfile và requirements ứng viên. Docker socket bị từ chối và registry/PyPI không phân giải được từ phiên Codex. Chưa khóa digest/hash hoặc xác minh build Linux. |
+| R1-08, R1-09 | **BLOCKED runtime** | Chưa có TLS ingress và chưa quan sát placement từ số liệu Kubernetes thực. |
+| Truy cập của phiên R2 | **BLOCKED** | Docker socket và TCP bind trả EPERM, truy vấn netlink bị từ chối, tải HTTPS thất bại ở DNS. Ansible ping localhost báo local RPC server không khởi động. Bằng chứng này áp dụng cho tiến trình trong phiên, không xác định lỗi dịch vụ trên host. |
+
+[Xem ma trận nghiệm thu và lệnh tái lập](LOCAL_RUNTIME_ACCEPTANCE.md)

@@ -1,5 +1,9 @@
 # Project state
 
+## Nghiệm thu R2 Local Runtime
+
+R2 đã tạo và xác minh ba worktree ứng viên cô lập. Platform sửa hai nguồn template Ansible tại `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae` với lint sạch, syntax 2/2 và tám ca regression/inventory đạt. Config và Workload giữ SHA ứng viên. Docker, mở cổng loopback và tải artifact bị chặn trong tiến trình Codex, nên R1-12 và kiểm tra runtime đầu cuối còn mở. R3 Hosted Integration **chưa đủ điều kiện**. [Báo cáo R2](LOCAL_RUNTIME_ACCEPTANCE.md)
+
 Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
 
 The initialization baseline was recorded on 2026-11-26. P0.1–P0.2 rechecked the local refs and source. GitHub, GHCR, AWS and Kubernetes state can change independently.
