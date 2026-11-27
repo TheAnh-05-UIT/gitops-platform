@@ -2,14 +2,14 @@
 
 ## Kết quả sau khi khôi phục quyền ngày 2026-11-27
 
-**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Trivy trả exit 1 vì các lỗ hổng HIGH trong hệ điều hành của ảnh Workload được pin. Đợt Ansible đầy đủ dừng ở ngưỡng đĩa dự phòng, trước khi kiểm được idempotency của toàn bộ topology. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
+**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Ảnh Workload Alpine đã qua gate Trivy trong lượt tiếp theo. Bằng chứng lần đầu dừng Ansible ở ngưỡng đĩa dự phòng được giữ bên dưới. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
 
 | Hạng mục | Kết quả và bằng chứng |
 | --- | --- |
 | R2.0 Môi trường | **PASS.** Docker client/Engine 29.9.3, 12 volume nền, bind Python trên loopback, tải Helm 17.344.287 byte và ghi thử cả ba worktree. DNS/TLS đạt với GitHub, GHCR, PyPI và Docker Hub. GHCR và Docker Registry trả HTTP 401 cho truy cập ẩn danh. PowerShell truy vấn Windows sau khi được cấp quyền ngoài sandbox. Ổ C chứa workspace và VHDX Docker, có 36,52 GiB khi tiền kiểm. Ổ D có 5,01 GiB và nằm ngoài nơi lưu R2. |
 | R2.1 Công cụ | **PASS.** Các binary đã kiểm nằm trong `.r2-runtime-tools/bin` ở workspace cha. Helm 4.3.2, k3d 5.8.3, Trivy 0.76.2, Gitleaks 8.30.1, actionlint 1.7.12, k6 2.4.0, promtool 3.16.0 và Alloy 1.22.0 được đối chiếu SHA256 với checksum hoặc release metadata. Playwright 1.65.2 và Chromium Headless Shell 159.0.8154.6 chạy với browser sandbox bật và thư viện Ubuntu giải nén cục bộ. |
 | R1-12 Reproducibility | **PASS phạm vi linux/amd64.** Workload `b0ddbba334fd1422540a0369215f0ed225770548` pin OCI index `sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b` và Linux manifest đã pull `sha256:4a68d3169325c47e1bafbb86425220f03fbdff6f079a419e8d39407183288217`. Chín dependency được giải trên CPython 3.12 Linux, hash khớp PyPI và Docker build thành công với `--require-hashes --only-binary=:all:`. Các kiến trúc khác chưa build. |
-| R2.2 Ảnh Linux và scan | **PASS build/runtime. FAIL vulnerability gate.** Docker image ID `sha256:dfbce3b3b8c3abc7962980c747eb3ec09d9d1be9e07dd17968b9a67b111669dd`, UID/GID 10001, health/identity/RED metrics đạt, SIGTERM exit 0. Trivy quét đúng local tag, 54 HIGH, 0 CRITICAL và 0 secret. Một mục có bản sửa trong dữ liệu Trivy (`libzstd1`), 53 mục không có phiên bản vá ghi nhận. Ảnh Bookworm đối chứng có 100 HIGH và 2 CRITICAL. SBOM CycloneDX 1.7 có 98 thành phần. |
+| R2.2 Ảnh Linux và scan lần đầu | **PASS build/runtime. FAIL vulnerability gate trên Trixie.** Docker image ID `sha256:dfbce3b3b8c3abc7962980c747eb3ec09d9d1be9e07dd17968b9a67b111669dd`, UID/GID 10001, health/identity/RED metrics đạt, SIGTERM exit 0. Trivy quét đúng local tag, 54 HIGH, 0 CRITICAL và 0 secret. Một mục có bản sửa trong dữ liệu Trivy (`libzstd1`), 53 mục không có phiên bản vá ghi nhận. Ảnh Bookworm đối chứng có 100 HIGH và 2 CRITICAL. SBOM CycloneDX 1.7 có 98 thành phần. |
 | R2.3 Ansible | **PASS** local connection và chuẩn bị node Linux cô lập. `k3s-node.yml` chạy trên Ubuntu 24.04 với Docker transport, xác minh checksum binary K3s, tạo ownership marker và render systemd unit. Hai lượt có `changed=4` và `changed=0`, đều `failed=0`. **BLOCKED** cho bootstrap đầy đủ hai lượt. Lab dùng bản sao playbook thay duy nhất assertion transport sang Docker, cài `iproute2` để thu facts và dùng K3s drop-in `snapshotter: native` sau khi nested overlayfs bị từ chối. Systemd server và worker đầu đều Ready với K3s v1.36.1+k3s1. Worker thứ hai đã nhận token TLS-pinned và bắt đầu handler khởi động khi guard dừng lab. Kiểm tra toàn topology và lượt thứ hai chưa chạy xong. |
 | R2.4 Kubernetes | **PASS.** k3d `idp-r2-accept` có một server, hai worker, cả ba Ready với k3s v1.36.1+k3s1. Hai workload replicas chạy trên hai worker có nhãn vùng mô phỏng. Helm lint, render và deployment policy đạt. Ingress TLS trả JSON qua chứng chỉ lab đã tin cậy, `/metrics` trên ingress trả 404 theo route exact `/`, health nội bộ trả 200. Probes, requests/limits, PDB và HPA từ chart được triển khai thực. |
 | R2.5 Argo CD | **PASS.** Argo CD 3.6.3 dùng Git Smart HTTP chỉ đọc trong cụm. Baseline `4c40b5cfe1a674568e3970a892e104d12b89a575` Synced/Healthy, drift replicas 2→1 được self-heal về 2. Revision thử HPA `725d036ad06123f6f71a8d61051d9de8e79043f1` Synced/Healthy. Revert `bb0c5559c93acb4c8be395e7bdb642e8b764cf59` xóa HPA, trả về hai replicas và cùng Git tree với baseline. |
@@ -20,11 +20,17 @@
 
 Config commits `dfd3486a92e69afe62d63884190199a122381f6a` và `b235d282e2b500beb3450ffaf6a696f6c1e57204` sửa hai lỗi quan sát được. Platform giữ commit Ansible `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae`. Chi tiết kiểm thử và lỗi còn mở nằm trong [TEST_RESULTS](TEST_RESULTS.md) và [DEFECT_REGISTER](DEFECT_REGISTER.md).
 
+### Ảnh Workload sau khi xử lý gate bảo mật
+
+Workload `1fa207eddc775a10c39619fd9bbec162ef017d89` dùng CPython 3.12 trên Alpine với OCI index `sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89`. Linux amd64 manifest là `sha256:a61cbd76a882645de7f91423329fe43a67eed60d7da24f9e5331414bb3618b20`. Giữ nguyên phiên bản Python dependencies và thay hash của MarkupSafe bằng các wheel musllinux lấy từ PyPI. Scan Alpine ban đầu báo 16 HIGH trong `krb5-libs`. Pin bản sửa `1.22.3-r0` trong Dockerfile.
+
+**PASS** Trivy với cùng ngưỡng HIGH/CRITICAL và scanner secret trên ảnh `sha256:49ddf1a4d577ad638dbe54d1fa4bdfcfbce11d7b372ef10ff59c3578d0cb0192`. Scan trả exit 0, 0 HIGH/CRITICAL, 0 secret và 49 thành phần CycloneDX 1.7. Ảnh giữ UID/GID 10001, qua 6/6 runtime tests, HTTP health/identity/metrics và SIGTERM exit 0. Trạng thái musl được xác minh trên linux/amd64. Argo CD đồng bộ Git lab revision `f392cf20d93d76887cf8f3c7d358e6770c99f3de` và báo Synced/Healthy. Cả hai Pod Ready trên đúng config digest `sha256:9616c9a2e073df314544dd63f71d4cbc7b6a53dd386e07092a01ddca1451b973` từ log build. Service trả health và identity qua port-forward.
+
 ### Ngưỡng đĩa và trạng thái bàn giao
 
 `df -B1 --output=avail /mnt/c` được lấy mẫu khi chạy load và bootstrap. Ngưỡng dừng sớm là 17 GiB để giữ mức tối thiểu 15 GiB. Ansible dừng khi mẫu còn 18.042.568.704 byte, khoảng 16,80 GiB. Sau dừng, C còn 17.438.568.448 byte, khoảng 16,24 GiB. Các container Ansible của lần chạy đã dừng. k3d `idp-r2-accept` đã dừng và được giữ để tái lập. So sánh danh sách trước và sau xác nhận đủ 12 volume gốc.
 
-Để đánh giá lại R3, cần chạy lại full bootstrap và lượt idempotency với đĩa đủ dư và xử lý gate ảnh Workload bằng bản vá hoặc base đã được quét đạt. Portal history dùng hợp đồng Argo/GitHub chuẩn và chưa có bằng chứng tích hợp thật trong lần chạy này.
+Để đánh giá lại R3, cần chạy lại full bootstrap và lượt idempotency với đĩa đủ dư. Portal history dùng hợp đồng Argo/GitHub chuẩn và chưa có bằng chứng tích hợp thật trong lần chạy này.
 
 ## Checkpoint ban đầu
 

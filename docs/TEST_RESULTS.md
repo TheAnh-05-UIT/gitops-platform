@@ -71,3 +71,9 @@ Các phép kiểm build, scan, cluster, Argo CD, portal/ILP, observability và E
 | k6 | **PASS** 90/90 ở 3 VU/30s p95 18,93 ms. 7.501/7.501 ở 100 req/s–75s p95 5,65 ms. HPA từ 2 lên 3 tại CPU 56% so với target lab 10%. |
 
 Xem [ma trận R2](LOCAL_RUNTIME_ACCEPTANCE.md) để đối chiếu phạm vi của từng ca và SHA.
+
+### R2 kiểm lại ảnh Alpine
+
+Ảnh từ Workload `1fa207e` xây trên linux/amd64 với OCI digest và musllinux wheel hash. **PASS** Trivy 0 HIGH, 0 CRITICAL, 0 secret, CycloneDX có 49 thành phần. `pip check`, 6/6 runtime tests, HTTP health/identity/metrics và SIGTERM đều đạt. Ảnh Alpine chưa vá trước đó có 16 HIGH của `krb5-libs`.
+
+Argo CD đồng bộ revision lab `f392cf2` và triển khai hai Pod Ready của đúng ảnh đã quét. Health và identity qua Service trả HTTP 200.
