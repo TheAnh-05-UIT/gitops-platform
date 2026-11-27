@@ -81,3 +81,7 @@ Argo CD đồng bộ revision lab `f392cf2` và triển khai hai Pod Ready của
 ### R2 kiểm lại Ansible trên systemd
 
 Docker transport với Ubuntu 24.04.5, K3s v1.36.1+k3s1, native snapshotter và tmpfs riêng. **PASS** full playbook với 11/9/9 thay đổi trên server/worker/worker. Ba node Ready, cả hai worker có nhãn vùng mô phỏng. Chạy lại cùng inventory cho 0 thay đổi, 0 lỗi trên cả ba host. Xem điều kiện của lab trong [nghiệm thu R2](LOCAL_RUNTIME_ACCEPTANCE.md#ansible-full-bootstrap-và-idempotency-kiểm-lại).
+
+### R2 kiểm lại lịch sử Portal
+
+**PASS** Chromium đọc `/history` sau login OIDC lab. App-scoped token qua HTTPS đọc được `workload-lab/workload-api`, bị từ chối với App ngoài scope, hiển thị revision so sánh `1bd7f2ab4ab2bc4ffba9835dc7deb8df36e12b79` từ Argo thật. App quan sát giữ sync tự động tắt và chưa có deploy history.

@@ -2,7 +2,7 @@
 
 ## Kết quả sau khi khôi phục quyền ngày 2026-11-27
 
-**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Ảnh Workload Alpine đã qua gate Trivy trong lượt tiếp theo. Lượt Ansible tiếp theo đã bootstrap đủ ba node và idempotent. Bằng chứng lần đầu dừng ở ngưỡng đĩa dự phòng được giữ bên dưới. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
+**R2 Local Runtime và E2E — PASS trong lab linux/amd64.** Các gate hosted của R3 thuộc phạm vi riêng. Build và thử nghiệm tích hợp cục bộ đã chạy. Ảnh Workload Alpine đã qua gate Trivy trong lượt tiếp theo. Lượt Ansible tiếp theo đã bootstrap đủ ba node và idempotent. Bằng chứng lần đầu dừng ở ngưỡng đĩa dự phòng được giữ bên dưới. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
 
 | Hạng mục | Kết quả và bằng chứng |
 | --- | --- |
@@ -16,7 +16,7 @@
 | R2.6 Observability | **PASS thu thập, truy vấn và alert thực.** kube-prometheus-stack 85.0.0 và Loki 18.7.6 khớp SHA256 của upstream release, hai workload targets UP, RED request counter quan sát được, Grafana dashboard `workload-api-red` có ba panel. Alloy gửi 20 mẫu sự kiện đã lọc sang Loki, Grafana truy vấn được datasource Loki. Alertmanager nhận alert kiểm thử do Prometheus gửi. Sửa route Alertmanager kế thừa receiver `null` bị thiếu và xử lý ký tự xuống dòng trong log CRI. Release Loki cài cục bộ dùng tên `workload-logs` nên selector mặc định `lab-loki` ban đầu không chọn Pod. Render với release name trong runbook có selector khớp. Sau khi sửa selector riêng trong lab, Grafana proxy tới Loki `/ready` thành công và Pod ngoài namespace bị từ chối kết nối. Cả hai ca chạy sau khi khởi động lại k3d. Footprint tại một mẫu metrics là 68 mCPU và 866 MiB cho mười Pod observability. |
 | R2.7 Portal và optimizer | **PASS trong lab.** Chromium qua TLS thử login với OIDC provider giả lập cục bộ, PKCE, nonce, cookie Secure/HttpOnly, replay 400 và viewer POST 403. Deployer preview động đề xuất ba replicas dựa trên snapshot Kubernetes thật, xác nhận diff và submit 403 khi cổng ghi đóng. Adapter GitHub chỉ đọc dữ liệu từ Git local qua test double. Node/Pod và metrics lấy từ kube API. PuLP/CBC Optimal 5/5, median 5,35 ms. Ước lượng latency dùng 7 mẫu thời gian đến byte đầu từ ingress lab, median 11,43 ms, không có input giá. |
 | R2.8 Load và recovery | **PASS.** k6 chuẩn 3 VU/30 giây, 90/90 requests hợp lệ, p95 18,93 ms. Kịch bản HPA lab 100 req/s trong 75 giây, 7.501/7.501 hợp lệ, p95 5,65 ms, mục tiêu CPU riêng của bài thử 10%, scale 2→3. Xóa một Pod và quan sát Pod thay thế Ready. Drain giới hạn selector Workload qua eviction/PDB, hai replicas Ready trên worker còn lại, sau đó uncordon. Git revert được controller đồng bộ về baseline. |
-| Hosted và AWS | **NOT RUN** ngoài phạm vi. Portal dùng IdP giả lập và adapter GitHub local. History adapter ràng buộc repo HTTPS GitHub và AppProject chuẩn, nên đường history Portal nối Argo thật chưa chạy trong lab Smart HTTP. |
+| Hosted và AWS | **NOT RUN** ngoài phạm vi. Portal dùng IdP giả lập và adapter GitHub local. Đường history dùng AppProject chuẩn được kiểm riêng bằng API Argo HTTPS cục bộ với sync tự động tắt. |
 
 Config commits `dfd3486a92e69afe62d63884190199a122381f6a` và `b235d282e2b500beb3450ffaf6a696f6c1e57204` sửa hai lỗi quan sát được. Platform giữ commit Ansible `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae`. Chi tiết kiểm thử và lỗi còn mở nằm trong [TEST_RESULTS](TEST_RESULTS.md) và [DEFECT_REGISTER](DEFECT_REGISTER.md).
 
@@ -37,11 +37,15 @@ Workload `1fa207eddc775a10c39619fd9bbec162ef017d89` dùng CPython 3.12 trên Alp
 
 Ba container kiểm thử đã dừng sau khi lấy bằng chứng. Kiểm thử Ansible dùng Docker transport cục bộ. AWS SSM và vận hành cloud nằm ngoài phạm vi.
 
+### Portal history qua Argo HTTPS
+
+**PASS.** Chromium đăng nhập qua OIDC lab và mở `/history`. Portal gọi API HTTPS của Argo CD 3.6.3 bằng token ứng dụng có TTL 15 phút. Token đọc được `workload-lab/workload-api` và bị từ chối khi đọc `r2-workload`. Trang hiển thị revision so sánh `1bd7f2ab4ab2bc4ffba9835dc7deb8df36e12b79`, trạng thái OutOfSync/Healthy và chưa có lịch sử deploy cho Application quan sát. Argo đọc Config `main` công khai để so sánh. Client fixture đọc lịch sử GitHub qua GET ẩn danh. App chỉ so sánh và sync tự động tắt. Pipeline Argo Smart HTTP của lab giữ vai trò triển khai cục bộ.
+
 ### Ngưỡng đĩa và trạng thái bàn giao
 
 `df -B1 --output=avail /mnt/c` được lấy mẫu khi chạy load và bootstrap. Ngưỡng dừng sớm là 17 GiB để giữ mức tối thiểu 15 GiB. Ansible dừng khi mẫu còn 18.042.568.704 byte, khoảng 16,80 GiB. Sau dừng, C còn 17.438.568.448 byte, khoảng 16,24 GiB. Các container Ansible của lần chạy đã dừng. k3d `idp-r2-accept` đã dừng và được giữ để tái lập. So sánh danh sách trước và sau xác nhận đủ 12 volume gốc.
 
-Đang kiểm tra Portal history qua hợp đồng Argo/GitHub chuẩn. Các bước hosted và AWS thuộc gate riêng.
+Các bước hosted và AWS thuộc gate riêng. Lần kiểm lại Ansible dùng tmpfs và có tối thiểu 19.395.903.488 byte trống trên C. Cả hai lab đã dừng sau khi lấy đủ bằng chứng.
 
 ## Checkpoint ban đầu
 
