@@ -23,7 +23,7 @@ Tất cả commit nằm trên nhánh cục bộ `fix/p0-p7-verification` của t
 
 ## Ca còn chặn
 
-- **BLOCKED.** Docker CLI có mặt nhưng daemon named pipe không đáp ứng. WSL trả `E_ACCESSDENIED`. k3d, Ansible, ansible-lint, Trivy, Gitleaks, actionlint, k6, promtool và Alloy không có trên PATH. Hai gói Helm upstream tải qua HTTPS đều exit 7. Không đổi dịch vụ host, tải phần mềm hệ thống hoặc mượn cluster đang chạy.
+- **BLOCKED.** Docker CLI có mặt nhưng daemon named pipe không đáp ứng. WSL trả `E_ACCESSDENIED`. k3d, Ansible, ansible-lint, Trivy, Gitleaks, actionlint, k6, promtool và Alloy không có trên PATH. Chrome/Edge headless lỗi GPU trong profile tạm và Playwright không kết nối listener loopback. Hai gói Helm upstream tải qua HTTPS đều exit 7. Không đổi dịch vụ host, tải phần mềm hệ thống hoặc mượn cluster đang chạy.
 - **NOT RUN.** Kubernetes/Argo drift, private TLS ingress sau khi cài controller, load/HPA, drain, khôi phục K3s thật, telemetry end-to-end, resource overhead và bảo mật container. SQLite phục hồi giả lập và policy/render offline đã chạy.
 - **OPEN.** R1-12 cần base OCI digest được xác minh, dependency hashes cho Linux và build/scan image exact. Gói upstream có thể render phần phụ trợ sau khi cung cấp artefact cục bộ đã duyệt. Snapshot observed thật cần export từ cluster đã duyệt và RTT/cost có nguồn. Audit retention và xác thực GHCR read là gate riêng.
 - **NOT RUN theo quyền.** AWS, remote backend và real provider, hosted GitHub/GHCR, deploy và publication. Phải có xác nhận owner và runbook tương ứng. [Gate AWS](MANUAL_AWS_GATES.md) · [Promotion runbook](PROMOTION_RUNBOOK.md)
