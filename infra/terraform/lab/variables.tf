@@ -192,7 +192,7 @@ variable "worker" {
       floor(var.worker.root_volume.size_gib) == var.worker.root_volume.size_gib &&
       alltrue([
         for id, label in var.worker.simulated_regions :
-        contains(["k3s-agent1", "k3s-agent2"], id) && can(regex("^[a-z]{2}(-[a-z]+)+-[1-9][0-9]*$", label))
+        contains(["k3s-agent1", "k3s-agent2"], id) && length(label) <= 63 && can(regex("^[a-z]{2}(-[a-z]+)+-[1-9][0-9]*$", label))
       ])
     )
     error_message = "worker needs an EC2 type, a whole volume size between 1 and 16384 GiB, and region-shaped labels keyed by k3s-agent1 or k3s-agent2."

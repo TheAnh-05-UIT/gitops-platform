@@ -490,3 +490,26 @@ run "reject_blank_billing_tag" {
 
   expect_failures = [var.cost_allocation]
 }
+
+run "accept_worker_region_label_at_kubernetes_limit" {
+  command = plan
+
+  variables {
+    worker = { simulated_regions = { k3s-agent1 = "xx-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1" } }
+  }
+
+  assert {
+    condition     = length(output.node_definitions["k3s-agent1"].simulated_region) == 63
+    error_message = "A Kubernetes label at the 63 character boundary must be preserved."
+  }
+}
+
+run "reject_worker_region_label_beyond_kubernetes_limit" {
+  command = plan
+
+  variables {
+    worker = { simulated_regions = { k3s-agent1 = "xx-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1" } }
+  }
+
+  expect_failures = [var.worker]
+}

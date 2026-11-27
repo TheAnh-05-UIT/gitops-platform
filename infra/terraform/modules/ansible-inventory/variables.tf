@@ -68,7 +68,7 @@ variable "nodes" {
         )) &&
         (id == "k3s-server" && var.lab_profile != "minimal"
           ? node.simulated_region == null
-          : can(regex("^[a-z]{2}(-[a-z]+)+-[1-9][0-9]*$", node.simulated_region))
+          : can(regex("^[a-z]{2}(-[a-z]+)+-[1-9][0-9]*$", node.simulated_region)) && length(node.simulated_region) <= 63
         )
       )
     ]), false)
