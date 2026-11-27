@@ -61,10 +61,10 @@ Server mặc định `t3.medium`, worker `t3.small`. Đây là cấu hình khở
 | --- | --- | --- |
 | `python -B scripts/terraform_offline.py --provider-mirror infra/terraform/.terraform/providers` | PASS | Terraform 1.15.5, AWS provider khóa 6.73.0. Bảy root/module validate, 111 mock plan test gồm 97 ca trước bootstrap. Mirror cục bộ, `-backend=false`, lockfile chỉ đọc, backend lab test override trong scratch. |
 | `python -B -m unittest discover -s infra/terraform/bootstrap/tests` | PASS | 7 ca policy/backend/renderer. |
-| `python -B -m unittest discover -s tests` | PASS | Platform 52/52 gồm 16 portal, 11 snapshot/placement, 7 recovery và 3 hợp đồng liên repo. Config 54/54, Workload 15/15. Platform trỏ vào hai worktree ứng viên bằng `PLATFORM_CONFIG_CHECKOUT` và `PLATFORM_WORKLOAD_CHECKOUT`. Dùng venv hiện có và PyYAML từ cache cục bộ. |
+| `python -B -m unittest discover -s tests` | PASS | Platform 52/52 gồm 16 portal, 11 snapshot/placement, 7 recovery và 3 hợp đồng liên repo. Config 55/55, Workload 15/15. Platform trỏ vào hai worktree ứng viên bằng `PLATFORM_CONFIG_CHECKOUT` và `PLATFORM_WORKLOAD_CHECKOUT`. Dùng venv hiện có và PyYAML từ cache cục bộ. |
 | `helm lint` và `helm template` | PASS | Helm 4.3.2, workload mặc định, overlay TLS private, overlay metrics và chart demo. Negative test chạy Helm kiểm tra HPA, policy, ảnh sai và manifest trùng. |
 | `node --input-type=module --check` và `bash --noprofile --norc -n` | PASS | Cú pháp script k6 và 10 đoạn Bash của runbook recovery. Chưa chạy phát tải. |
-| `terraform fmt -check -recursive`, Python AST, JSON, YAML, `git diff --check` | PASS | Cả ba phạm vi checkpoint. Kiểm tra mẫu khóa riêng, GitHub token và AWS access-key định dạng chuẩn trên 144 tệp đã review không có kết quả. Kiểm tra mẫu có phạm vi hẹp hơn scanner chuyên dụng. |
+| `terraform fmt -check -recursive`, Python AST, JSON, YAML, `git diff --check` | PASS | Cả ba phạm vi checkpoint. Kiểm tra mẫu khóa riêng, GitHub token và AWS access-key định dạng chuẩn trên 145 tệp đã review không có kết quả. Kiểm tra mẫu có phạm vi hẹp hơn scanner chuyên dụng. |
 | `python -B -m benchmarks.compare_algorithms --snapshot optimizer/data/placement_snapshot_v1.json --as-of 2026-11-26T12:01:00Z --repeats 7` | PASS | PuLP 3.3.0 và CBC. Fixture hai workload, ba replica. CBC và exhaustive đều đạt 0,724. Greedy đạt 0,738, chênh 1,934%. Đây là điểm hàm mục tiêu có trọng số, không phải chi phí AWS. |
 | Ansible CLI, Linux provider, Docker build, `actionlint`, `gitleaks`, `promtool`, k6, Alloy CLI và chart upstream | BLOCKED / NOT RUN | Ansible và các CLI tương ứng chưa sẵn dùng. WSL trả `E_ACCESSDENIED`. Docker CLI có mặt nhưng không kết nối được daemon. Mirror Linux/chart upstream chưa có gói đã duyệt trong môi trường này. Không cài công cụ hoặc thay đổi dịch vụ máy. |
 | AWS IAM/S3/locking, Terraform thật, SSM, GitHub hosted, OIDC, TLS, Kubernetes, restore | NOT RUN | Cần gate và bằng chứng owner. Toàn bộ test hạ tầng dùng mock hoặc fixture. |
@@ -83,7 +83,7 @@ Các lần fail trong phát triển đã được tái hiện và sửa, gồm c
 | Repo | Nhánh và mốc đối chiếu | Commit cục bộ |
 | --- | --- | --- |
 | Platform | `feat/provision-aws-k3s-infrastructure`, merge base `ae2664c`, cached `origin/main` là `1f5233a` | `860319f` Terraform; `dce69af` Ansible; `57807b5` runner; `08ceda8` placement; `bde941b` portal; `c7d63ac` recovery; `ad819b7` tích hợp. Báo cáo được ghi trong commit tài liệu tiếp theo. |
-| Config | `feat/offline-config-lab` từ cached `origin/main` `1bd7f2a` | `bfc7134` chart/guard; `b50a5c5` observability; `e06b9a1` demo. |
+| Config | `feat/offline-config-lab` từ cached `origin/main` `1bd7f2a` | `bfc7134` chart/guard; `b50a5c5` observability; `e06b9a1` demo chart; `59a61aa` ứng dụng Argo demo tùy chọn. |
 | Workload | `feat/offline-workload-lab` từ cached `origin/main` `406b6d3` | `10bb5fa` telemetry; `626f62b` demo sources. |
 
 Config và Workload dùng worktree riêng dưới thư mục tạm của hệ thống. Workload gốc vẫn ở `e21e077`, Config gốc ở `9564111`. Hai chuẩn cached vẫn cần đối chiếu lại khi được phép làm việc với remote. Platform đang chênh ba commit so với cached main ở phía main, cần review ancestry trước khi phát hành PR. Không reset, rebase, force-push, xóa ref, gián đoạn worktree review hoặc ghi đè draft hạ tầng cũ. Không đưa workflow đang sửa ở Workload gốc vào ứng viên. Ứng viên kế thừa hai hard stop từ cached main. [Nhật ký](EXECUTION_LOG.md)
@@ -117,7 +117,7 @@ The default tag and two-resource workload render remain compatible. Existing rea
 No AWS or hosted operation was executed. Freeze remains active, and both Workload hosted hard stops are inherited. IAM, SSM transfer, portal bot, TF state, human reviewer and workload trust remain scoped. A reviewed retained audit sink and independent branch rules remain activation gates.
 
 #### Validation
-111 Terraform mock plans, seven bootstrap tests, Platform 52/52, Config 54/54 and Workload 15/15 passed. Helm and cross-repo contract checks passed. CBC and exhaustive both scored 0.724 on the simulation fixture. Cloud deployment, hosted checks, Linux Ansible runtime and dedicated scanning remain pending.
+111 Terraform mock plans, seven bootstrap tests, Platform 52/52, Config 55/55 and Workload 15/15 passed. Helm and cross-repo contract checks passed. CBC and exhaustive both scored 0.724 on the simulation fixture. Cloud deployment, hosted checks, Linux Ansible runtime and dedicated scanning remain pending.
 
 #### Deployment and rollback
 Run identity and state gates before lab apply. Approve SSM/K3s and manual Argo sync separately. Verify the approved publication receipt before pinning and load the exact digest for the demo. Roll back with a reviewed Config change and verify the observed revision and digest. Run separately approved recovery and cleanup gates.
@@ -152,7 +152,7 @@ Tag mặc định và chart render hai tài nguyên vẫn tương thích. Readin
 Không thực hiện AWS hoặc hosted. Freeze giữ nguyên, ứng viên Workload kế thừa hai hard stop. IAM, truyền tệp SSM, bot portal, Terraform state, reviewer và workload giữ quyền riêng. Kho audit lưu giữ đã duyệt và ruleset giới hạn ghi cần hoàn tất trước khi kích hoạt.
 
 #### Kiểm thử và xác minh
-111 Terraform mock plan, bảy ca bootstrap, Platform 52/52, Config 54/54 và Workload 15/15 đạt. Helm và hợp đồng liên repo đạt. CBC và exhaustive cùng đạt 0,724 trên fixture mô phỏng. Triển khai cloud, hosted, Ansible Linux runtime và scanner chuyên dụng đang chờ.
+111 Terraform mock plan, bảy ca bootstrap, Platform 52/52, Config 55/55 và Workload 15/15 đạt. Helm và hợp đồng liên repo đạt. CBC và exhaustive cùng đạt 0,724 trên fixture mô phỏng. Triển khai cloud, hosted, Ansible Linux runtime và scanner chuyên dụng đang chờ.
 
 #### Triển khai và khôi phục
 Thực hiện gate danh tính và state trước lab apply. Duyệt riêng SSM/K3s và sync Argo thủ công. Kiểm receipt đã duyệt trước pin và dùng đúng digest cho demo. Rollback qua thay đổi Config đã review, xác minh revision và digest quan sát. Thực hiện gate recovery và cleanup đã được duyệt riêng.
@@ -171,4 +171,4 @@ Lab một AZ và một control-plane server. Ansible, thực thi mạng, scaling
 
 ## Tóm tắt portfolio và CV
 
-Thiết kế và triển khai offline nền tảng GitOps trên AWS/K3s với Terraform khóa version và S3 locking, SSM/Ansible, OCI promotion có xác minh độc lập, quan sát dịch vụ, bộ tối ưu ILP và portal có RBAC. Phối hợp hợp đồng qua ba repo, chạy 111 ca Terraform mock, 121 ca regression Python liên repo và bảy ca bootstrap riêng, dựng benchmark có thể phát lại và diễn tập khôi phục SQLite với fixture. Phạm vi minh chứng hiện tại là kiểm chứng cục bộ. Các kết quả hosted, AWS và production nằm trong gate tách riêng.
+Thiết kế và triển khai offline nền tảng GitOps trên AWS/K3s với Terraform khóa version và S3 locking, SSM/Ansible, OCI promotion có xác minh độc lập, quan sát dịch vụ, bộ tối ưu ILP và portal có RBAC. Phối hợp hợp đồng qua ba repo, chạy 111 ca Terraform mock, 122 ca regression Python liên repo và bảy ca bootstrap riêng, dựng benchmark có thể phát lại và diễn tập khôi phục SQLite với fixture. Phạm vi minh chứng hiện tại là kiểm chứng cục bộ. Các kết quả hosted, AWS và production nằm trong gate tách riêng.
