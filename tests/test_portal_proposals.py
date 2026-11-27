@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from portal.app import create_app
-from portal.github_client import GitHubError, prepare_change, submit_change
+from portal.github_client import GitHubError, prepare_change, read_placement_base, submit_change
 from portal.status import observed_status
 
 BASE = "a" * 40
@@ -20,6 +20,13 @@ VALUES = """image:
 replicaCount: 2
 nodeSelector:
   idp.example.com/region: ap-southeast-1
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
 autoscaling:
   enabled: false
 """
@@ -44,6 +51,13 @@ class GitHubProposalTests(unittest.TestCase):
         for values in (VALUES.replace("false", "true"), VALUES + "\n  enabled: true\n", VALUES.replace("enabled:", "'enabled':"),
                        VALUES + "autoscaling: {enabled: true}\n", VALUES.replace("autoscaling:", '"autoscaling":'),
                        VALUES.replace("autoscaling:", "  'idp.example.com/region': eu-west-1\nautoscaling:")):
+            with self.subTest(values=values), patch("portal.github_client.github_request", side_effect=snapshot(values)):
+                with self.assertRaises(GitHubError):
+                    prepare_change("fixture/config", "fixture-read", 3, "eu-west-1")
+
+    def test_requests_reject_duplicate_and_ambiguous_yaml_numbers(self):
+        for values in (VALUES.replace("cpu: 100m", "cpu: 010"),
+                       VALUES.replace("cpu: 100m", "cpu: 100m\n    cpu: 50m")):
             with self.subTest(values=values), patch("portal.github_client.github_request", side_effect=snapshot(values)):
                 with self.assertRaises(GitHubError):
                     prepare_change("fixture/config", "fixture-read", 3, "eu-west-1")
@@ -83,6 +97,11 @@ def prepare_fixture():
         return prepare_change("fixture/config", "fixture-read", 3, "eu-west-1")
 
 
+def read_fixture_base():
+    with patch("portal.github_client.github_request", side_effect=snapshot()):
+        return read_placement_base("fixture/config", "fixture-read")
+
+
 class PortalProposalTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -103,12 +122,21 @@ class PortalProposalTests(unittest.TestCase):
         return self.client.post("/", data={"csrf_token": "fixture", "action": "preview", "replicas": 3, "max_rtt_ms": 180})
 
     def test_preview_does_not_write(self):
-        with patch("portal.app.prepare_change", return_value=prepare_fixture()), patch("portal.app.submit_change") as submit:
+        with patch("portal.github_client.github_request", side_effect=snapshot()), \
+             patch("portal.app.submit_change") as submit:
             result = self.preview()
         self.assertEqual(result.status_code, 200)
         self.assertIn(b"+replicaCount: 3", result.data)
         self.assertIn(b'name="proposal"', result.data)
         submit.assert_not_called()
+
+    def test_github_requests_override_stale_snapshot_demand(self):
+        values = VALUES.replace("cpu: 100m", "cpu: 2000m").replace("cpu: 250m", "cpu: 2500m")
+        with patch("portal.github_client.github_request", side_effect=snapshot(values)) as api:
+            response = self.preview()
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(b'name="proposal"', response.data)
+        self.assertEqual([call.args[0] for call in api.call_args_list], ["GET", "GET"])
 
     def test_submit_requires_unmodified_actor_bound_preview_and_csrf(self):
         for payload in ({"proposal": "invalid", "csrf_token": "fixture"}, {"proposal": "invalid", "csrf_token": "bad"}):
@@ -129,12 +157,14 @@ class PortalProposalTests(unittest.TestCase):
         change = prepare_fixture()
         evidence = {"source_mode": "simulation", "workloads": {"workload-api": {"placement_region": change.region}},
                     "rejections": {}}
-        with patch("portal.app._snapshot_placement", return_value=("Optimal", evidence)), \
+        with patch("portal.app.read_placement_base", return_value=read_fixture_base()), \
+             patch("portal.app._snapshot_placement", return_value=("Optimal", evidence)), \
              patch("portal.app.prepare_change", return_value=change):
             proposal = re.search(rb'name="proposal" value="([^" ]+)"', self.preview().data)[1].decode()
         params = {"action": "submit", "proposal": proposal, "csrf_token": "fixture"}
         from dataclasses import replace
-        with patch("portal.app.observed_status", return_value={"compared_revision": BASE}), \
+        with patch("portal.app.read_placement_base", return_value=read_fixture_base()), \
+             patch("portal.app.observed_status", return_value={"compared_revision": BASE}), \
              patch("portal.app._snapshot_placement", return_value=("Optimal", evidence)), \
              patch("portal.app.prepare_change", return_value=replace(change, base="e" * 40)) as prepare, \
              patch("portal.app.submit_change", return_value=17) as write:
@@ -150,6 +180,41 @@ class PortalProposalTests(unittest.TestCase):
             self.app.config["PORTAL_AUDIT_FILE"] = None
             self.assertEqual(self.client.post("/", data=params).status_code, 503)
             write.assert_called_once()
+
+    def test_rollback_requires_capacity_for_the_old_region(self):
+        prior = "e" * 40
+        previous = VALUES.replace("ap-southeast-1", "unrepresented-region")
+        replies = [*snapshot(), snapshot(previous)[1]]
+        with patch("portal.status.github_request", return_value=[{"sha": prior}]), \
+             patch("portal.github_client.github_request", side_effect=replies) as api:
+            response = self.client.post("/", data={"action": "rollback", "csrf_token": "fixture", "revision": prior})
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(all(call.args[0] == "GET" for call in api.call_args_list))
+
+    def test_audit_confirmation_failure_preserves_the_same_request(self):
+        import re
+        with patch("portal.github_client.github_request", side_effect=snapshot()):
+            preview = self.preview()
+        token = re.search(rb'name="proposal" value="([^" ]+)"', preview.data)[1].decode()
+        params = {"action": "submit", "proposal": token, "csrf_token": "fixture"}
+        with self.client.session_transaction() as state:
+            state["subject"] = "other"
+        with patch("portal.app.submit_change") as write:
+            self.assertEqual(self.client.post("/", data=params).status_code, 403)
+            write.assert_not_called()
+        with self.client.session_transaction() as state:
+            state["subject"] = "requester"
+        with patch("portal.app.read_placement_base", return_value=read_fixture_base()), \
+             patch("portal.app.observed_status", return_value={"compared_revision": BASE}), \
+             patch("portal.app.submit_change", return_value=17) as write:
+            with patch("portal.app.os.fsync", side_effect=[None, OSError("synthetic audit failure")]):
+                response = self.client.post("/", data=params)
+            self.assertEqual(response.status_code, 503)
+            self.assertIn(token.encode(), response.data)
+            self.assertIn(b"/pull/17", response.data)
+            self.assertEqual(self.client.post("/", data=params).status_code, 200)
+            self.assertEqual(write.call_args_list[0].args[2], write.call_args_list[1].args[2])
+            self.assertIn("at", json.loads(self.audit_file.read_text().splitlines()[0]))
 
     def test_out_of_sync_comparison_does_not_become_deployed_revision(self):
         source = {"repoURL": "https://github.com/fixture/config.git", "path": "apps/workload-api", "targetRevision": "main"}

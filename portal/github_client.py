@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from difflib import unified_diff
 import hashlib
 import re
-from uuid import uuid4
 
 import requests
+
+from optimizer.kubernetes_snapshot import request_units
 
 VALUES_PATH = "apps/workload-api/values.yaml"
 BASE_BRANCH = "main"
@@ -51,97 +52,6 @@ def github_request(method, url, token, **kwargs):
         return response.json()
     except ValueError as error:
         raise GitHubError("GitHub trả phản hồi không hợp lệ.") from error
-
-
-def create_placement_pull_request(repository, token, replicas, region):
-    repo_url = f"https://api.github.com/repos/{repository}"
-    file_url = f"{repo_url}/contents/{VALUES_PATH}"
-
-    base_ref = github_request(
-        "GET",
-        f"{repo_url}/git/ref/heads/{BASE_BRANCH}",
-        token,
-    )
-    base_sha = base_ref["object"]["sha"]
-
-    values_file = github_request(
-        "GET",
-        file_url,
-        token,
-        params={"ref": base_sha},
-    )
-    original = base64.b64decode(values_file["content"]).decode("utf-8")
-
-    replica_matches = list(REPLICA_LINE.finditer(original))
-    region_matches = list(REGION_LINE.finditer(original))
-
-    if len(replica_matches) != 1 or len(region_matches) != 1:
-        raise GitHubError(
-            "values.yaml cần có đúng một dòng replicaCount dạng số và "
-            "một nhãn idp.example.com/region trong nodeSelector."
-        )
-
-    current_replicas = int(replica_matches[0].group(2))
-    current_region = region_matches[0].group(2)
-
-    if current_replicas == replicas and current_region == region:
-        return None
-
-    updated = REPLICA_LINE.sub(
-        lambda match: f"{match.group(1)}{replicas}",
-        original,
-        count=1,
-    )
-    updated = REGION_LINE.sub(
-        lambda match: f"{match.group(1)}{region}",
-        updated,
-        count=1,
-    )
-
-    branch = f"portal/workload-api-placement-{uuid4().hex[:8]}"
-    title = f"chore: place workload API in {region} with {replicas} replicas"
-
-    github_request(
-        "POST",
-        f"{repo_url}/git/refs",
-        token,
-        json={
-            "ref": f"refs/heads/{branch}",
-            "sha": base_sha,
-        },
-    )
-
-    try:
-        github_request(
-            "PUT",
-            file_url,
-            token,
-            json={
-                "message": title,
-                "content": base64.b64encode(updated.encode("utf-8")).decode("ascii"),
-                "sha": values_file["sha"],
-                "branch": branch,
-            },
-        )
-
-        return github_request(
-            "POST",
-            f"{repo_url}/pulls",
-            token,
-            json={
-                "title": title,
-                "head": branch,
-                "base": BASE_BRANCH,
-                "body": (
-                    f"Requested from the Developer Portal: "
-                    f"{replicas} replica(s) in {region}."
-                ),
-            },
-        )
-    except GitHubError as error:
-        raise GitHubError(
-            f"{error} Kiểm tra nhánh {branch} trên GitHub trước khi gửi lại."
-        ) from error
 
 
 REPOSITORY = re.compile(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+")
@@ -213,7 +123,45 @@ def _placement_fields(values):
     return int(replicas[0].group(2)), region[0].group(2)
 
 
-def prepare_change(repository, token, replicas, region, *, previous_revision=None):
+@dataclass(frozen=True)
+class PlacementBase:
+    repository: str
+    revision: str
+    blob: str
+    values: str
+    replicas: int
+    region: str
+    requests: tuple[int, int]
+
+
+def _placement_requests(values):
+    sections = {}
+    current = None
+    for line in _mapping_lines(values, "resources"):
+        header = re.fullmatch(r"  (requests|limits):[ \t]*(?:#.*)?", line)
+        if header and header[1] not in sections:
+            current = header[1]
+            sections[current] = {}
+            continue
+        field = re.fullmatch(r"""    (cpu|memory):[ \t]*(?P<quote>['"]?)(?P<value>[0-9A-Za-z.+-]+)(?P=quote)[ \t]*(?:#.*)?""", line)
+        if not field or current is None or field[1] in sections[current]:
+            raise GitHubError("Requests/limits không khớp hợp đồng tài nguyên của portal.")
+        value = field["value"]
+        if not field["quote"] and re.fullmatch(r"0[0-9]+", value):
+            raise GitHubError("Định dạng số của CPU hoặc memory request không rõ ràng.")
+        sections[current][field[1]] = value
+    if set(sections.get("requests", {})) != {"cpu", "memory"}:
+        raise GitHubError("Cần CPU và memory requests rõ ràng trong values.yaml.")
+    try:
+        units = request_units(sections["requests"])
+        if min(units) < 1:
+            raise ValueError("empty request")
+    except ValueError as error:
+        raise GitHubError("CPU hoặc memory request không hợp lệ.") from error
+    return units
+
+
+def read_placement_base(repository, token):
     url = repository_url(repository)
     try:
         base = github_request("GET", f"{url}/git/ref/heads/{BASE_BRANCH}", token)["object"]["sha"]
@@ -221,12 +169,20 @@ def prepare_change(repository, token, replicas, region, *, previous_revision=Non
             raise ValueError("Invalid base commit")
     except (ValueError, KeyError, TypeError) as error:
         raise GitHubError("GitHub trả revision không hợp lệ.") from error
-    blob, original = _fetch_values(url, token, base)
-    _placement_fields(original)
+    blob, values = _fetch_values(url, token, base)
+    replicas, region = _placement_fields(values)
+    return PlacementBase(repository, base, blob, values, replicas, region, _placement_requests(values))
+
+
+def prepare_change(repository, token, replicas, region, *, previous_revision=None, source=None):
+    source = source if source is not None else read_placement_base(repository, token)
+    if source.repository != repository:
+        raise GitHubError("Revision không khớp kho Config.")
+    original = source.values
     if previous_revision is not None:
         if not COMMIT.fullmatch(previous_revision):
             raise GitHubError("Revision của lần triển khai trước không hợp lệ.")
-        _, older_values = _fetch_values(url, token, previous_revision)
+        _, older_values = _fetch_values(repository_url(repository), token, previous_revision)
         replicas, region = _placement_fields(older_values)
     if type(replicas) is not int or replicas not in (1, 2, 3) or not isinstance(region, str) or not PLACEMENT_REGION.fullmatch(region):
         raise GitHubError("Số replica hoặc nhãn vùng nằm ngoài hợp đồng của portal.")
@@ -234,7 +190,7 @@ def prepare_change(repository, token, replicas, region, *, previous_revision=Non
     updated = REGION_LINE.sub(lambda match: f"{match.group(1)}{region}", updated, count=1)
     diff = "".join(unified_diff(original.splitlines(keepends=True), updated.splitlines(keepends=True),
                                 fromfile=f"a/{VALUES_PATH}", tofile=f"b/{VALUES_PATH}"))
-    return PlacementChange(repository, base, blob, original, updated, replicas, region, diff)
+    return PlacementChange(repository, source.revision, source.blob, original, updated, replicas, region, diff)
 
 
 def _verified_head(repo_url, token, head, change, bot_id):

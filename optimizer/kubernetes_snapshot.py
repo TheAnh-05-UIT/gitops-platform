@@ -80,6 +80,11 @@ def _round(value, mode):
     return nonnegative_int(int(value.to_integral_value(rounding=mode)), "resource quantity")
 
 
+def request_units(resources):
+    """Round effective CPU and memory requests up to the model's unit size."""
+    return tuple(_round(value, ROUND_CEILING) for value in _pair(resources))
+
+
 def _requests(container):
     resources = mapping(mapping(container, "container").get("resources", {}), "container resources")
     return _pair(resources.get("requests", {}))

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from portal.github_client import create_placement_pull_request
+from portal.github_client import prepare_change, submit_change
 
 CONFIG = Path(os.environ.get("PLATFORM_CONFIG_CHECKOUT", Path(__file__).resolve().parents[2] / "gitops-platform-config"))
 sys.path.insert(0, str(CONFIG))
@@ -24,15 +24,31 @@ NEXT = "a" * 40
 
 def placement_proposal(values):
     encoded = base64.b64encode(values.encode()).decode()
-    replies = [
-        {"object": {"sha": "fixture"}},
-        {"sha": "fixture-file", "content": encoded},
-        {}, {}, {"number": 1},
-    ]
-    with patch("portal.github_client.github_request", side_effect=replies) as api:
-        create_placement_pull_request("fixture/config", "synthetic", 3, "eu-west-1")
-    written = api.call_args_list[3].kwargs["json"]["content"]
-    return base64.b64decode(written).decode()
+    base, head, file_sha, request_id = "b" * 40, "c" * 40, "d" * 40, "e" * 32
+    repository = "fixture/config"
+    branch = f"portal/workload-api-{request_id}"
+    author = {"id": 42}
+    with patch("portal.github_client.github_request", side_effect=[
+        {"object": {"sha": base}}, {"sha": file_sha, "content": encoded},
+    ]):
+        change = prepare_change(repository, "synthetic", 3, "eu-west-1")
+
+    artifact = {"sha": file_sha, "content": base64.b64encode(change.updated.encode()).decode()}
+    ref_details = {"repo": {"full_name": repository}}
+    answers = [[], {}, {}, {"object": {"sha": head}}, {
+        "sha": head, "author": author, "parents": [{"sha": base}],
+        "files": [{"filename": VALUES_PATH, "status": "modified"}],
+    }, artifact, {
+        "number": 1, "body": f"<!-- idp-request:{request_id} -->", "user": author,
+        "head": {"ref": branch, "sha": head, **ref_details},
+        "base": {"ref": "main", **ref_details},
+    }]
+    with patch("portal.github_client.github_request", side_effect=answers) as api:
+        assert submit_change(change, "synthetic", request_id, "placement", 42) == 1
+    put, = [call for call in api.call_args_list if call.args[0] == "PUT"]
+    assert put.kwargs["json"]["branch"] == branch
+    assert put.kwargs["json"]["sha"] == file_sha
+    return base64.b64decode(put.kwargs["json"]["content"]).decode()
 
 
 def merge_values(current, base, proposed):

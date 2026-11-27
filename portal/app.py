@@ -15,7 +15,7 @@ from pulp import PulpSolverError
 from optimizer.placement import solve_ilp
 from optimizer.snapshot import build_snapshot_model, explain, timestamp
 from portal.github_client import (
-    COMMIT, GitHubError, prepare_change, submit_change,
+    COMMIT, GitHubError, prepare_change, read_placement_base, submit_change,
 )
 from portal.identity import OIDC_KEYS, check_csrf, install_identity, require_role
 from portal.status import desired_revisions, observed_status
@@ -70,9 +70,9 @@ def audit(event, request_id=None, *, durable=False, **details):
     subject = session.get("subject")
     actor = hmac.new(current_app.secret_key.encode(), f"audit-actor:{subject}".encode(),
                      hashlib.sha256).hexdigest()[:24] if subject and current_app.secret_key else None
-    record = {"event": event, "actor": actor, "request_id": request_id, "service": "workload-api", **details}
+    record = {"at": datetime.now(timezone.utc).isoformat(), "event": event, "actor": actor,
+              "request_id": request_id, "service": "workload-api", **details}
     line = json.dumps(record, sort_keys=True)
-    current_app.logger.warning("portal_audit %s", line)
     if durable:
         path = current_app.config.get("PORTAL_AUDIT_FILE")
         if not path or not Path(path).is_absolute() or Path(path).is_symlink():
@@ -86,6 +86,7 @@ def audit(event, request_id=None, *, durable=False, **details):
             stream.write((line + "\n").encode("utf-8"))
             stream.flush()
             os.fsync(stream.fileno())
+    current_app.logger.warning("portal_audit %s", line)
 
 
 def catalog():
@@ -118,7 +119,7 @@ def _page(status=200, **details):
     return render_template("deploy.html", csrf_token=session["csrf_token"], **details), status
 
 
-def _snapshot_placement(replicas, max_rtt_ms):
+def _snapshot_placement(source, replicas, max_rtt_ms, *, fixed_region=None):
     configured = current_app.config["PORTAL_SNAPSHOT_FILE"]
     snapshot = json.loads(Path(configured or FIXTURE).read_text(encoding="utf-8"))
     if not configured:
@@ -126,18 +127,28 @@ def _snapshot_placement(replicas, max_rtt_ms):
     elif snapshot.get("mode") == "simulation":
         as_of = timestamp(current_app.config["PORTAL_SNAPSHOT_AS_OF"])
     else:
+        if snapshot.get("config_revision") != source.revision:
+            raise ValueError("Observed snapshot belongs to a different Config revision")
         as_of = datetime.now(timezone.utc)
     tasks = [item for item in snapshot["workloads"] if item["name"] == "workload-api"]
     if len(tasks) != 1:
         raise ValueError("Snapshot must define workload-api once")
-    tasks[0].update(replicas=replicas, max_rtt_ms=max_rtt_ms)
+    task = tasks[0]
+    cpu, memory = source.requests
+    task.update(replicas=replicas, cpu_mcpu_per_replica=cpu, memory_mib_per_replica=memory,
+                current_region=source.region, current_replicas=source.replicas)
+    if max_rtt_ms is not None:
+        task["max_rtt_ms"] = max_rtt_ms
+    if fixed_region is not None:
+        allowed = task.get("allowed_regions")
+        task["allowed_regions"] = [fixed_region] if allowed is None or fixed_region in allowed else []
     compiled = build_snapshot_model(snapshot, as_of, max_age_seconds=300)
     status, proposed = solve_ilp(compiled.model, time_limit=3)
     return status, explain(compiled, proposed)
 
 
 def _signer():
-    return URLSafeTimedSerializer(current_app.secret_key, salt="idp-proposal-v1")
+    return URLSafeTimedSerializer(current_app.secret_key, salt="idp-proposal-v2")
 
 
 def _preview(repository, token, action):
@@ -157,13 +168,18 @@ def _preview(repository, token, action):
             rtt = request.form.get("max_rtt_ms", type=int)
             if replicas not in (1, 2, 3) or rtt is None or not 1 <= rtt <= 10000:
                 return _page(400, error="Chọn 1–3 replica và ngưỡng RTT từ 1 đến 10.000 ms.")
-            status, evidence = _snapshot_placement(replicas, rtt)
-            if status == "Infeasible":
-                return _page(422, error="Không tìm được phương án khả thi.", evidence=evidence)
-            if status != "Optimal":
-                return _page(503, error="Bộ giải chưa chứng minh được phương án tối ưu.")
+        source = read_placement_base(repository, token)
+        if previous:
+            change = prepare_change(repository, token, replicas, region, previous_revision=previous, source=source)
+            replicas, region = change.replicas, change.region
+        status, evidence = _snapshot_placement(source, replicas, rtt, fixed_region=region)
+        if status == "Infeasible":
+            return _page(422, error="Không tìm được phương án khả thi.", evidence=evidence)
+        if status != "Optimal":
+            return _page(503, error="Bộ giải chưa chứng minh được phương án tối ưu.")
+        if not previous:
             region = evidence["workloads"]["workload-api"]["placement_region"]
-        change = prepare_change(repository, token, replicas, region, previous_revision=previous)
+            change = prepare_change(repository, token, replicas, region, source=source)
     except GitHubError:
         audit("preview_unavailable", kind=kind)
         return _page(502, error="Không xác minh được hợp đồng values.yaml hoặc revision.")
@@ -177,7 +193,7 @@ def _preview(repository, token, action):
         "fingerprint": change.fingerprint, "id": secrets.token_hex(16), "kind": kind,
         "replicas": change.replicas, "region": change.region, "previous": previous,
         "rtt": rtt,
-        "source": evidence["source_mode"] if evidence else "git-history",
+        "source": evidence["source_mode"],
     }
     audit("previewed", proposal["id"], kind=kind, base=change.base)
     return _page(proposal=_signer().dumps(proposal), diff=change.diff, evidence=evidence)
@@ -205,20 +221,22 @@ def _submit(repository, read_token):
         observed = observed_status(config["PORTAL_ARGO_ORIGIN"], config["PORTAL_ARGO_READ_TOKEN"], repository)
         if not observed:
             return _page(503, error="Cần xác minh nguồn Argo CD trước khi gửi đề xuất.")
-        if proposal["source"] != "git-history":
-            status, evidence = _snapshot_placement(proposal["replicas"], proposal["rtt"])
-            selected = evidence["workloads"].get("workload-api", {})
-            if (status != "Optimal" or evidence["source_mode"] != proposal["source"]
-                    or selected.get("placement_region") != proposal["region"]):
-                return _page(409, error="Dữ liệu placement đã thay đổi. Hãy xem trước lại.")
+        source = read_placement_base(repository, read_token)
         change = prepare_change(repository, read_token, proposal["replicas"], proposal["region"],
-                                previous_revision=proposal["previous"])
+                                previous_revision=proposal["previous"], source=source)
         if (change.base, change.fingerprint) != (proposal["base"], proposal["fingerprint"]):
             audit("stale_preview", proposal["id"])
             return _page(409, error="Cấu hình đã thay đổi. Hãy xem trước lại.")
+        if observed.get("compared_revision") != change.base:
+            return _page(409, error="Argo CD chưa đối chiếu revision của đề xuất.")
+        fixed_region = change.region if proposal["kind"] == "rollback" else None
+        status, evidence = _snapshot_placement(source, change.replicas, proposal["rtt"], fixed_region=fixed_region)
+        selected = evidence["workloads"].get("workload-api", {})
+        if (status != "Optimal" or evidence["source_mode"] != proposal["source"]
+                or selected.get("placement_region") != change.region):
+            return _page(409, error="Dữ liệu placement đã thay đổi. Hãy xem trước lại.")
         audit("submit_started", proposal["id"], durable=True, kind=proposal["kind"], base=change.base)
         number = submit_change(change, config["PORTAL_GITHUB_TOKEN"], proposal["id"], proposal["kind"], bot_id)
-        audit("submit_confirmed", proposal["id"], durable=True, pull=number)
     except GitHubError:
         audit("submit_unconfirmed", proposal["id"])
         # The same signed preview retries with the same branch and request marker.
@@ -227,7 +245,14 @@ def _submit(repository, read_token):
     except (KeyError, TypeError, ValueError, OSError, PulpSolverError):
         audit("submission_inputs_unavailable", proposal["id"])
         return _page(503, error="Chưa xác minh được điều kiện để gửi đề xuất.")
-    return _page(pull_request={"number": number, "html_url": f"https://github.com/{repository}/pull/{number}"})
+    pull_request = {"number": number, "html_url": f"https://github.com/{repository}/pull/{number}"}
+    try:
+        audit("submit_confirmed", proposal["id"], durable=True, pull=number)
+    except OSError:
+        audit("confirmation_pending", proposal["id"], pull=number)
+        return _page(503, pull_request=pull_request, proposal=request.form["proposal"],
+                     error="GitHub đã xác nhận PR. Thử lại cùng đề xuất để lưu xác nhận.")
+    return _page(pull_request=pull_request)
 
 
 def deploy():
