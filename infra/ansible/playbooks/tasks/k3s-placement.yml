@@ -1,0 +1,40 @@
+---
+- name: Wait for the selected node to be Ready
+  ansible.builtin.command:
+    argv: ["{{ k3s_binary }}", kubectl, wait, "--for=condition=Ready", "node/{{ k3s_node_id }}", "--timeout=15s"]
+  register: k3s_node_ready
+  retries: 12
+  delay: 5
+  until: k3s_node_ready.rc == 0
+  changed_when: false
+
+- name: Inspect the actual node identity and labels
+  ansible.builtin.command:
+    argv: ["{{ k3s_binary }}", kubectl, get, node, "{{ k3s_node_id }}", -o, json]
+  register: k3s_node_json
+  changed_when: false
+
+- name: Check node version and private address
+  ansible.builtin.assert:
+    that:
+      - node.status.nodeInfo.kubeletVersion == k3s_release
+      - hostvars[k3s_node_id].node_private_ip in (node.status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | list)
+  vars:
+    node: "{{ k3s_node_json.stdout | from_json }}"
+
+- name: Set a changed or missing simulated placement label
+  ansible.builtin.command:
+    argv: ["{{ k3s_binary }}", kubectl, label, node, "{{ k3s_node_id }}", "idp.example.com/region={{ target }}", --overwrite]
+  vars:
+    target: "{{ hostvars[k3s_node_id].simulated_region }}"
+    actual: "{{ (k3s_node_json.stdout | from_json).metadata.labels.get('idp.example.com/region') }}"
+  when: hostvars[k3s_node_id].simulated_region is not none and target != actual
+  changed_when: true
+
+- name: Clear a stale label on an ineligible node
+  ansible.builtin.command:
+    argv: ["{{ k3s_binary }}", kubectl, label, node, "{{ k3s_node_id }}", "idp.example.com/region-"]
+  when:
+    - hostvars[k3s_node_id].simulated_region is none
+    - "'idp.example.com/region' in (k3s_node_json.stdout | from_json).metadata.labels"
+  changed_when: true

@@ -1,0 +1,14 @@
+{
+  "bucket_name": "example-platform-lab-tfstate-a1b2",
+  "aws_account_id": "000000000000",
+  "aws_region": "us-east-1",
+  "project_name": "gitops-platform",
+  "environment": "lab",
+  "cost_allocation": {
+    "owner": "platform-lab",
+    "cost_center": "engineering-lab"
+  },
+  "resource_tags": {
+    "Purpose": "terraform-state"
+  }
+}
