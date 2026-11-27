@@ -1,0 +1,125 @@
+---
+- name: Apply the approved Linux baseline
+  ansible.builtin.import_playbook: linux-baseline.yml
+
+- name: Configure the single K3s server
+  hosts: k3s_server
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  vars:
+    k3s_mode: server
+    k3s_unit: k3s
+  tasks:
+    - name: Verify server topology
+      ansible.builtin.assert:
+        that:
+          - groups.k3s_server | length == 1
+          - groups.get('k3s_agents', []) | length <= 2
+
+    - name: Prepare lab-owned K3s paths and verified binary
+      ansible.builtin.include_tasks: tasks/k3s-node.yml
+
+    - name: Generate the dedicated agent password on the server
+      ansible.builtin.shell: |
+        set -eu
+        umask 077
+        destination=/etc/rancher/k3s/gitops-platform-agent-password
+        temporary=$(mktemp "${destination}.XXXXXXXX")
+        trap 'rm -f -- "$temporary"' EXIT
+        openssl rand -hex 32 > "$temporary"
+        grep -Eq '^[0-9a-f]{64}$' "$temporary"
+        mv -- "$temporary" "$destination"
+      args:
+        creates: /etc/rancher/k3s/gitops-platform-agent-password
+      no_log: true
+
+    - name: Validate the stored agent password before changing the service
+      ansible.builtin.command:
+        argv: [grep, -Eq, '^[0-9a-f]{64}$', /etc/rancher/k3s/gitops-platform-agent-password]
+      changed_when: false
+      no_log: true
+
+    - name: Render configuration and start the server
+      ansible.builtin.include_tasks: tasks/k3s-start.yml
+
+    - name: Wait for the server before enrolling workers
+      ansible.builtin.command:
+        argv: ["{{ k3s_binary }}", kubectl, wait, "--for=condition=Ready", "node/{{ inventory_hostname }}", "--timeout=15s"]
+      register: k3s_server_ready
+      retries: 12
+      delay: 5
+      until: k3s_server_ready.rc == 0
+      changed_when: false
+
+    - name: Read the TLS-pinned agent token when workers are selected
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/agent-token
+      register: k3s_server_agent_secret
+      when: groups.get('k3s_agents', []) | length > 0
+      no_log: true
+
+    - name: Require a secure-format join token
+      ansible.builtin.assert:
+        that: (k3s_server_agent_secret.content | b64decode | trim) is match('^K10[0-9a-f]{64}::.+$')
+      when: groups.get('k3s_agents', []) | length > 0
+      no_log: true
+  handlers:
+    - name: Restart K3s
+      ansible.builtin.systemd_service:
+        name: "{{ k3s_unit }}"
+        daemon_reload: true
+        state: restarted
+
+- name: Enroll the selected K3s workers
+  hosts: k3s_agents
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_mode: agent
+    k3s_unit: k3s-agent
+    k3s_server_id: "{{ groups.k3s_server[0] }}"
+  tasks:
+    - name: Prepare lab-owned K3s paths and verified binary
+      ansible.builtin.include_tasks: tasks/k3s-node.yml
+
+    - name: Store the TLS-pinned agent token privately
+      ansible.builtin.copy:
+        content: "{{ hostvars[k3s_server_id].k3s_server_agent_secret.content | b64decode | trim }}\n"
+        dest: /etc/rancher/k3s/gitops-platform-agent-token
+        mode: "0600"
+      no_log: true
+      notify: Restart K3s
+
+    - name: Render configuration and start the worker
+      ansible.builtin.include_tasks: tasks/k3s-start.yml
+
+    - name: Check the current worker before advancing to the next batch
+      ansible.builtin.command:
+        argv: ["{{ hostvars[k3s_server_id].k3s_binary }}", kubectl, wait, "--for=condition=Ready", "node/{{ inventory_hostname }}", "--timeout=15s"]
+      delegate_to: "{{ k3s_server_id }}"
+      register: k3s_current_worker
+      retries: 12
+      delay: 5
+      until: k3s_current_worker.rc == 0
+      changed_when: false
+  handlers:
+    - name: Restart K3s
+      ansible.builtin.systemd_service:
+        name: "{{ k3s_unit }}"
+        daemon_reload: true
+        state: restarted
+
+- name: Verify expected nodes and placement labels
+  hosts: k3s_server
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Reconcile per-node placement labels after readiness
+      ansible.builtin.include_tasks: tasks/k3s-placement.yml
+      loop: "{{ groups.k3s | sort }}"
+      loop_control:
+        loop_var: k3s_node_id
