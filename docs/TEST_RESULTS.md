@@ -66,7 +66,7 @@ Các phép kiểm build, scan, cluster, Argo CD, portal/ILP, observability và E
 | Ansible local transport và Ubuntu 24.04 qua Docker transport | **PASS** pong. Hai lượt chạy node preparation `changed=4`, `changed=0`, `failed=0`. **BLOCKED** full systemd bootstrap tại disk guard. Server và worker đầu Ready, worker thứ hai đang start. Lượt bootstrap idempotency đầy đủ chưa chạy. |
 | Config observability tests, Helm lint, policy script và validators | **PASS** 4/4, chart lint/render và deployment policy exit 0, Alloy validate và promtool kiểm 2 rule đạt. |
 | Argo CD và Kubernetes | **PASS** 3 Ready nodes, sync và health đúng Git SHA, drift 1→2, Pod thay thế Ready, drain một worker hạn chế theo selector, hai replicas Ready sau reschedule, Git revert phục hồi baseline. |
-| Prometheus, Loki, Alloy, Grafana và Alertmanager | **PASS** 2/2 targets UP, RED counter 2.965 tại lần query, 20 log events lọc đúng, ba dashboard panels, Grafana truy vấn Loki và Alertmanager nhận alert tổng hợp. Kết nối namespace ngoài bị refused sau khi chỉnh selector lab. Kiểm lại peer hợp lệ sau đổi selector chưa chạy. |
+| Prometheus, Loki, Alloy, Grafana và Alertmanager | **PASS** 2/2 targets UP, RED counter 2.965 tại lần query, 20 log events lọc đúng, ba dashboard panels, Grafana truy vấn Loki và Alertmanager nhận alert tổng hợp. Sau khi chỉnh selector lab, Grafana proxy tới Loki `/ready` thành công và kết nối từ namespace ngoài bị từ chối. |
 | Snapshot capture và Portal | **PASS** 3/3 snapshot tests. Export live và 5/5 lượt ILP Optimal, browser OIDC/RBAC và preview dựa trên observed data, submit đóng trả 403. |
 | k6 | **PASS** 90/90 ở 3 VU/30s p95 18,93 ms. 7.501/7.501 ở 100 req/s–75s p95 5,65 ms. HPA từ 2 lên 3 tại CPU 56% so với target lab 10%. |
 
