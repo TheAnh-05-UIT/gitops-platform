@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lịch sử workload-api</title>
+  </head>
+  <body>
+    <main>
+      <p><a href="{{ url_for('catalog') }}">Danh mục dịch vụ</a></p>
+      <h1>Lịch sử workload-api</h1>
+      {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+      <h2>Trạng thái Argo CD</h2>
+      {% if observed %}
+      <p>{{ observed.sync }} · {{ observed.health }} · revision so sánh <code>{{ observed.compared_revision }}</code></p>
+      <p>Quan sát vào {{ observed.reconciled_at or "thời điểm chưa xác minh" }}.</p>
+      {% if observed.last_synced_revision %}
+      <p>Lần đồng bộ thành công gần nhất: <code>{{ observed.last_synced_revision }}</code> vào {{ observed.last_synced_at }}.</p>
+      {% else %}
+      <p>Chưa xác minh được revision đã đồng bộ trong lịch sử Argo CD.</p>
+      {% endif %}
+      {% else %}
+      <p>Chưa có quan sát đáng tin cậy từ Argo CD.</p>
+      {% endif %}
+      <h2>Các revision đã thay đổi values.yaml trên main</h2>
+      <ul>
+        {% for revision in revisions %}
+        <li><code>{{ revision }}</code>
+          {% if can_request %}
+          <form method="post" action="{{ url_for('deploy') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="revision" value="{{ revision }}">
+            <button name="action" value="rollback">Xem trước đề xuất hoàn tác placement</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </main>
+  </body>
+</html>

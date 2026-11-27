@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Danh mục dịch vụ</title>
+  </head>
+  <body>
+    <main>
+      <h1>Danh mục dịch vụ</h1>
+      <h2><a href="{{ url_for('deploy') }}">workload-api</a></h2>
+      <p>API HTTP của platform. Mọi thay đổi triển khai cần được duyệt trên kho GitOps.</p>
+      <p>Quyền của bạn: {{ "Xem và gửi đề xuất" if role == "deployer" else "Xem" }}</p>
+      <p><a href="{{ url_for('history') }}">Lịch sử và trạng thái triển khai</a></p>
+      <form method="post" action="{{ url_for('logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button>Đăng xuất</button>
+      </form>
+    </main>
+  </body>
+</html>
