@@ -55,3 +55,19 @@ Bảng này ghi phép đo mới trong WSL2. Các số P0–P7 ở trên là hồ
 | `terraform -chdir=infra/terraform fmt -check -recursive` tại Platform | **PASS** exit 0. Provider init, plan và các thao tác AWS **NOT RUN**. |
 
 Các phép kiểm build, scan, cluster, Argo CD, portal/ILP, observability và E2E còn lại được phân loại theo từng pha trong [nghiệm thu R2](LOCAL_RUNTIME_ACCEPTANCE.md).
+
+## R2 sau khôi phục môi trường thực thi
+
+| Phép kiểm | Kết quả quan sát |
+| --- | --- |
+| Workload unittest, actionlint và Gitleaks thư mục Workload | **PASS** 16/16, workflow lint exit 0, Gitleaks scan thư mục báo 0 leaks. |
+| Docker build, `pip check`, HTTP smoke và SIGTERM | **PASS.** 6/6 regression runtime trong chính ảnh. Hash-locked linux/amd64 build, 9 gói Python, không có broken requirements, UID/GID 10001, health/identity/metrics, exit 0 sau SIGTERM. |
+| Trivy image vulnerability/secret và CycloneDX | **FAIL** vulnerability policy trên cả trixie và Bookworm. Trixie 54 HIGH, Bookworm 100 HIGH và 2 CRITICAL. Trixie không báo secret. SBOM có 98 thành phần. |
+| Ansible local transport và Ubuntu 24.04 qua Docker transport | **PASS** pong. Hai lượt chạy node preparation `changed=4`, `changed=0`, `failed=0`. **BLOCKED** full systemd bootstrap tại disk guard. Server và worker đầu Ready, worker thứ hai đang start. Lượt bootstrap idempotency đầy đủ chưa chạy. |
+| Config observability tests, Helm lint, policy script và validators | **PASS** 4/4, chart lint/render và deployment policy exit 0, Alloy validate và promtool kiểm 2 rule đạt. |
+| Argo CD và Kubernetes | **PASS** 3 Ready nodes, sync và health đúng Git SHA, drift 1→2, Pod thay thế Ready, drain một worker hạn chế theo selector, hai replicas Ready sau reschedule, Git revert phục hồi baseline. |
+| Prometheus, Loki, Alloy, Grafana và Alertmanager | **PASS** 2/2 targets UP, RED counter 2.965 tại lần query, 20 log events lọc đúng, ba dashboard panels, Grafana truy vấn Loki và Alertmanager nhận alert tổng hợp. Kết nối namespace ngoài bị refused sau khi chỉnh selector lab. Kiểm lại peer hợp lệ sau đổi selector chưa chạy. |
+| Snapshot capture và Portal | **PASS** 3/3 snapshot tests. Export live và 5/5 lượt ILP Optimal, browser OIDC/RBAC và preview dựa trên observed data, submit đóng trả 403. |
+| k6 | **PASS** 90/90 ở 3 VU/30s p95 18,93 ms. 7.501/7.501 ở 100 req/s–75s p95 5,65 ms. HPA từ 2 lên 3 tại CPU 56% so với target lab 10%. |
+
+Xem [ma trận R2](LOCAL_RUNTIME_ACCEPTANCE.md) để đối chiếu phạm vi của từng ca và SHA.

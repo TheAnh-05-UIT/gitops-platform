@@ -2,7 +2,7 @@
 
 ## Nghiệm thu R2 Local Runtime
 
-R2 đã tạo và xác minh ba worktree ứng viên cô lập. Platform sửa hai nguồn template Ansible tại `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae` với lint sạch, syntax 2/2 và tám ca regression/inventory đạt. Config và Workload giữ SHA ứng viên. Docker, mở cổng loopback và tải artifact bị chặn trong tiến trình Codex, nên R1-12 và kiểm tra runtime đầu cuối còn mở. R3 Hosted Integration **chưa đủ điều kiện**. [Báo cáo R2](LOCAL_RUNTIME_ACCEPTANCE.md)
+Ba worktree giữ trên nhánh cục bộ `chore/r2-local-runtime`. Platform giữ sửa Ansible `8b7886e`, Workload `b0ddbba` khóa OCI base và Linux wheels, Config `dfd3486` và `b235d28` sửa Alertmanager và Alloy. k3d ba node, Argo sync/drift/revert, telemetry, browser Portal với OIDC giả lập, optimizer với dữ liệu Kubernetes thật, k6/HPA, Pod recovery và drain đều có bằng chứng lab. Trivy báo 54 HIGH trên ảnh Trixie và tiêu chí vulnerability vẫn **FAIL**. Ansible node preparation đã idempotent, còn full bootstrap và lượt idempotency toàn topology **BLOCKED** khi guard dừng ở khoảng 16,80 GiB trống. R3 Hosted Integration **chưa đủ điều kiện**. [Báo cáo R2](LOCAL_RUNTIME_ACCEPTANCE.md)
 
 Historical baseline and planned work. The [acceptance review](FINAL_ACCEPTANCE.md) and [defect register](DEFECT_REGISTER.md) record current candidate behavior and evidence.
 

@@ -11,11 +11,11 @@ Vị trí gốc, mức độ, tác động và tái hiện chi tiết của R1 g
 | R1-05 | MEDIUM | PASS offline | Workload `.github/workflows/ci.yml` pin Python action, cài runtime deps, giữ PyYAML. Bỏ skip thiếu Flask trong `tests/test_red_metrics.py`. Baseline thiếu Flask skip hai ca, ứng viên sửa bắt buộc hai ca. Hosted vẫn chưa thực thi. |
 | R1-06 | MEDIUM | PASS offline | Platform `lab/variables.tf` và `modules/ansible-inventory/variables.tf` cùng kiểm 63 ký tự như adapter. Hai ca HCL biên, lab lên 51/51 và cả runner 113/113. |
 | R1-07 | MEDIUM | PASS offline | Platform `portal/app.py` phân biệt intent chưa ghi và confirm lỗi sau khi có PR. Test mock fsync fail thấy HTTP 503 kèm PR và proposal cùng ID để đối chiếu, journal có timestamp. Retained audit là gate triển khai. |
-| R1-08 | MEDIUM | BLOCKED TLS cluster | Config `apps/workload-api/README.md` ghi rõ K3s bootstrap tắt Traefik và ServiceLB, port-forward là đường demo mặc định. Controller/private listener/TLS là lựa chọn đã review riêng. Chưa có runtime kubeconfig cô lập. |
-| R1-09 | MEDIUM | PASS fixture; BLOCKED observed runtime | Platform `optimizer/snapshot_capture.py` dùng exports offline, chuẩn hóa NodeMetricsList, bỏ annotation/env, ghép topology vật lý nếu có inventory và gắn Config revision. Test duplicate/future metrics, mode giả lập và redaction. RTT/cost vẫn do operator phê duyệt, không tự truy vấn Prometheus. |
+| R1-08 | MEDIUM | PASS lab TLS | k3d dùng Traefik riêng của lab, TLS xác minh qua cert lab, route GET / trả workload identity. Hạ tầng AWS giữ gate riêng. |
+| R1-09 | MEDIUM | PASS lab observed | Snapshot lấy Node/Pod và NodeMetrics từ kube API, gắn revision Argo local. Browser preview qua snapshot, CBC Optimal 5/5. Dữ liệu vị trí và latency chỉ áp dụng cho lab. Không có pricing. |
 | R1-10 | MEDIUM | PASS offline | Platform `tests/test_promotion_placement_contract.py` chạy `prepare_change` và `submit_change` qua test double, theo dõi PUT thật và hai merge order bằng Git tạm. Bỏ đường UUID cũ không còn caller. |
 | R1-11 | LOW | PASS scope chính | Platform đưa thiết kế AWS và ADR 0003/0004 vào worktree ứng viên, đánh dấu tài liệu baseline và nối với nghiệm thu hiện tại. Giữ nguyên bản gốc dở dang. |
-| R1-12 | LOW | OPEN, BLOCKED container | Workload `Dockerfile:1–6` và `requirements.txt:1–2` vẫn dùng tag base và version ranges. Cần pin digest đã duyệt và khóa hashes có thể chạy trên Linux, sau đó build/scan exact image. Không thay deps với digest/hashes chưa xác minh. Chặn reproducibility production. |
+| R1-12 | LOW | PASS linux/amd64 reproducibility inputs | Workload `b0ddbba` pin OCI digest và khóa chín gói runtime có SHA256 từ PyPI. Build hash-lock, scan và SBOM thực thi trên đúng artefact. Kết quả release security theo R2-05. |
 
 ## Ca khác phát hiện trong vòng sửa
 
@@ -27,8 +27,12 @@ Vị trí gốc, mức độ, tác động và tái hiện chi tiết của R1 g
 | Mục | Trạng thái | Bằng chứng |
 | --- | --- | --- |
 | Template Ansible dùng đường dẫn tương đối | **FAIL** trên ứng viên, **PASS** sau sửa `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae` | Lint 26.11.1 chặn hai `no-relative-paths` ở `k3s-node.yml`, `k3s-start.yml`. Neo nguồn template vào thư mục playbook. Regression kiểm tra cả hai đường dẫn mở được. Sau sửa syntax 2/2, test 8/8 và lint sạch. |
-| R1-12 | **OPEN / BLOCKED** | Tái hiện từ Dockerfile và requirements ứng viên. Docker socket bị từ chối và registry/PyPI không phân giải được từ phiên Codex. Chưa khóa digest/hash hoặc xác minh build Linux. |
-| R1-08, R1-09 | **BLOCKED runtime** | Chưa có TLS ingress và chưa quan sát placement từ số liệu Kubernetes thực. |
-| Truy cập của phiên R2 | **BLOCKED** | Docker socket và TCP bind trả EPERM, truy vấn netlink bị từ chối, tải HTTPS thất bại ở DNS. Ansible ping localhost báo local RPC server không khởi động. Bằng chứng này áp dụng cho tiến trình trong phiên, không xác định lỗi dịch vụ trên host. |
+| R1-12 | **PASS reproducibility inputs** | OCI index, Linux manifest, PyPI hashes, build Linux, SBOM và scan đã có bằng chứng. |
+| R1-08, R1-09 | **PASS trong lab** | TLS ingress và metrics Node/Pod thật có bằng chứng, URL Git được cung cấp trong lab. |
+| Truy cập của phiên R2 | **PASS sau restart** | Docker daemon, HTTPS, bind loopback và ba worktree ghi được. WSL PowerShell phải chạy qua cơ chế xin quyền. |
+| R2-03 · Alertmanager route | **FAIL → PASS** | Operator từ chối `undefined receiver "null" used in route` khi Helm kế thừa nested route. Config `dfd3486` khai báo `routes: []`, render và ca regression đạt. StatefulSet Ready và nhận alert do Prometheus gửi. |
+| R2-04 · Alloy CRI log framing | **FAIL → PASS** | Alloy follow Pod logs nhưng trước sửa mọi dòng bị lọc, Loki trả 0. Config `b235d28` nhận CR/LF cuối dòng trong bộ lọc và regex nhưng chỉ ghi sự kiện allowlist đã trích xuất. Regression, Alloy validate và mẫu 20 sự kiện Loki đạt. |
+| R2-05 · Workload base OS vulnerability | **OPEN / FAIL** | Trixie 54 HIGH, 0 CRITICAL, 0 secret. Trivy ghi 1 mục có phiên bản vá (`libzstd1`). Bookworm đối chứng không đạt (100 HIGH, 2 CRITICAL). |
+| R2-06 · Ansible full runtime | **BLOCKED disk** | Đã vượt lỗi overlayfs lồng trong Docker bằng drop-in native riêng của lab. Server và một worker Ready. Dừng sớm ở khoảng 16,80 GiB trống khi worker thứ hai khởi động, trước lượt idempotency đầy đủ. |
 
 [Xem ma trận nghiệm thu và lệnh tái lập](LOCAL_RUNTIME_ACCEPTANCE.md)

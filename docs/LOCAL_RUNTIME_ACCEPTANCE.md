@@ -1,6 +1,34 @@
 # R2 — Nghiệm thu runtime cục bộ
 
-**Kết luận ngày 2026-11-27 — BLOCKED. Chưa đủ bằng chứng để chuyển sang R3 Hosted Integration.** Kiểm tra Ansible syntax, inventory và lint đã đạt sau một bản sửa cục bộ. Tiến trình Codex bị từ chối khi kết nối Docker và mở cổng loopback, đồng thời không phân giải được các máy chủ chứa artifact. Chuỗi build → scan → GitOps → phục vụ → giám sát → phục hồi → rollback vẫn chưa được nghiệm thu. R1-12 còn mở.
+## Kết quả sau khi khôi phục quyền ngày 2026-11-27
+
+**R2 chưa đạt điều kiện chuyển sang R3.** Build và thử nghiệm tích hợp cục bộ đã chạy. Trivy trả exit 1 vì các lỗ hổng HIGH trong hệ điều hành của ảnh Workload được pin. Đợt Ansible đầy đủ dừng ở ngưỡng đĩa dự phòng, trước khi kiểm được idempotency của toàn bộ topology. Các kết quả bên dưới áp dụng cho lab cục bộ và các SHA ghi trong báo cáo.
+
+| Hạng mục | Kết quả và bằng chứng |
+| --- | --- |
+| R2.0 Môi trường | **PASS.** Docker client/Engine 29.9.3, 12 volume nền, bind Python trên loopback, tải Helm 17.344.287 byte và ghi thử cả ba worktree. DNS/TLS đạt với GitHub, GHCR, PyPI và Docker Hub. GHCR và Docker Registry trả HTTP 401 cho truy cập ẩn danh. PowerShell truy vấn Windows sau khi được cấp quyền ngoài sandbox. Ổ C chứa workspace và VHDX Docker, có 36,52 GiB khi tiền kiểm. Ổ D có 5,01 GiB và nằm ngoài nơi lưu R2. |
+| R2.1 Công cụ | **PASS.** Các binary đã kiểm nằm trong `.r2-runtime-tools/bin` ở workspace cha. Helm 4.3.2, k3d 5.8.3, Trivy 0.76.2, Gitleaks 8.30.1, actionlint 1.7.12, k6 2.4.0, promtool 3.16.0 và Alloy 1.22.0 được đối chiếu SHA256 với checksum hoặc release metadata. Playwright 1.65.2 và Chromium Headless Shell 159.0.8154.6 chạy với browser sandbox bật và thư viện Ubuntu giải nén cục bộ. |
+| R1-12 Reproducibility | **PASS phạm vi linux/amd64.** Workload `b0ddbba334fd1422540a0369215f0ed225770548` pin OCI index `sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b` và Linux manifest đã pull `sha256:4a68d3169325c47e1bafbb86425220f03fbdff6f079a419e8d39407183288217`. Chín dependency được giải trên CPython 3.12 Linux, hash khớp PyPI và Docker build thành công với `--require-hashes --only-binary=:all:`. Các kiến trúc khác chưa build. |
+| R2.2 Ảnh Linux và scan | **PASS build/runtime. FAIL vulnerability gate.** Docker image ID `sha256:dfbce3b3b8c3abc7962980c747eb3ec09d9d1be9e07dd17968b9a67b111669dd`, UID/GID 10001, health/identity/RED metrics đạt, SIGTERM exit 0. Trivy quét đúng local tag, 54 HIGH, 0 CRITICAL và 0 secret. Một mục có bản sửa trong dữ liệu Trivy (`libzstd1`), 53 mục không có phiên bản vá ghi nhận. Ảnh Bookworm đối chứng có 100 HIGH và 2 CRITICAL. SBOM CycloneDX 1.7 có 98 thành phần. |
+| R2.3 Ansible | **PASS** local connection và chuẩn bị node Linux cô lập. `k3s-node.yml` chạy trên Ubuntu 24.04 với Docker transport, xác minh checksum binary K3s, tạo ownership marker và render systemd unit. Hai lượt có `changed=4` và `changed=0`, đều `failed=0`. **BLOCKED** cho bootstrap đầy đủ hai lượt. Lab dùng bản sao playbook thay duy nhất assertion transport sang Docker, cài `iproute2` để thu facts và dùng K3s drop-in `snapshotter: native` sau khi nested overlayfs bị từ chối. Systemd server và worker đầu đều Ready với K3s v1.36.1+k3s1. Worker thứ hai đã nhận token TLS-pinned và bắt đầu handler khởi động khi guard dừng lab. Kiểm tra toàn topology và lượt thứ hai chưa chạy xong. |
+| R2.4 Kubernetes | **PASS.** k3d `idp-r2-accept` có một server, hai worker, cả ba Ready với k3s v1.36.1+k3s1. Hai workload replicas chạy trên hai worker có nhãn vùng mô phỏng. Helm lint, render và deployment policy đạt. Ingress TLS trả JSON qua chứng chỉ lab đã tin cậy, `/metrics` trên ingress trả 404 theo route exact `/`, health nội bộ trả 200. Probes, requests/limits, PDB và HPA từ chart được triển khai thực. |
+| R2.5 Argo CD | **PASS.** Argo CD 3.6.3 dùng Git Smart HTTP chỉ đọc trong cụm. Baseline `4c40b5cfe1a674568e3970a892e104d12b89a575` Synced/Healthy, drift replicas 2→1 được self-heal về 2. Revision thử HPA `725d036ad06123f6f71a8d61051d9de8e79043f1` Synced/Healthy. Revert `bb0c5559c93acb4c8be395e7bdb642e8b764cf59` xóa HPA, trả về hai replicas và cùng Git tree với baseline. |
+| R2.6 Observability | **PASS thu thập, truy vấn và alert thực.** kube-prometheus-stack 85.0.0 và Loki 18.7.6 khớp SHA256 của upstream release, hai workload targets UP, RED request counter quan sát được, Grafana dashboard `workload-api-red` có ba panel. Alloy gửi 20 mẫu sự kiện đã lọc sang Loki, Grafana truy vấn được datasource Loki. Alertmanager nhận alert kiểm thử do Prometheus gửi. Sửa route Alertmanager kế thừa receiver `null` bị thiếu và xử lý ký tự xuống dòng trong log CRI. Release Loki cài cục bộ dùng tên `workload-logs` nên selector mặc định `lab-loki` ban đầu không chọn Pod. Render với release name trong runbook có selector khớp. Sau khi sửa selector riêng trong lab, kết nối từ Pod ngoài namespace trả refused. Kiểm lại peer hợp lệ sau thay đổi này chưa chạy. Footprint tại một mẫu metrics là 68 mCPU và 866 MiB cho mười Pod observability. |
+| R2.7 Portal và optimizer | **PASS trong lab.** Chromium qua TLS thử login với OIDC provider giả lập cục bộ, PKCE, nonce, cookie Secure/HttpOnly, replay 400 và viewer POST 403. Deployer preview động đề xuất ba replicas dựa trên snapshot Kubernetes thật, xác nhận diff và submit 403 khi cổng ghi đóng. Adapter GitHub chỉ đọc dữ liệu từ Git local qua test double. Node/Pod và metrics lấy từ kube API. PuLP/CBC Optimal 5/5, median 5,35 ms. Ước lượng latency dùng 7 mẫu thời gian đến byte đầu từ ingress lab, median 11,43 ms, không có input giá. |
+| R2.8 Load và recovery | **PASS.** k6 chuẩn 3 VU/30 giây, 90/90 requests hợp lệ, p95 18,93 ms. Kịch bản HPA lab 100 req/s trong 75 giây, 7.501/7.501 hợp lệ, p95 5,65 ms, mục tiêu CPU riêng của bài thử 10%, scale 2→3. Xóa một Pod và quan sát Pod thay thế Ready. Drain giới hạn selector Workload qua eviction/PDB, hai replicas Ready trên worker còn lại, sau đó uncordon. Git revert được controller đồng bộ về baseline. |
+| Hosted và AWS | **NOT RUN** ngoài phạm vi. Portal dùng IdP giả lập và adapter GitHub local. History adapter ràng buộc repo HTTPS GitHub và AppProject chuẩn, nên đường history Portal nối Argo thật chưa chạy trong lab Smart HTTP. |
+
+Config commits `dfd3486a92e69afe62d63884190199a122381f6a` và `b235d282e2b500beb3450ffaf6a696f6c1e57204` sửa hai lỗi quan sát được. Platform giữ commit Ansible `8b7886e15c65c3887d1c658bb0922d5c4c8d7bae`. Chi tiết kiểm thử và lỗi còn mở nằm trong [TEST_RESULTS](TEST_RESULTS.md) và [DEFECT_REGISTER](DEFECT_REGISTER.md).
+
+### Ngưỡng đĩa và trạng thái bàn giao
+
+`df -B1 --output=avail /mnt/c` được lấy mẫu khi chạy load và bootstrap. Ngưỡng dừng sớm là 17 GiB để giữ mức tối thiểu 15 GiB. Ansible dừng khi mẫu còn 18.042.568.704 byte, khoảng 16,80 GiB. Sau dừng, C còn 17.438.568.448 byte, khoảng 16,24 GiB. Các container Ansible của lần chạy đã dừng. k3d `idp-r2-accept` đã dừng và được giữ để tái lập. So sánh danh sách trước và sau xác nhận đủ 12 volume gốc.
+
+Để đánh giá lại R3, cần chạy lại full bootstrap và lượt idempotency với đĩa đủ dư, kiểm lại peer Loki được phép sau khi áp policy và xử lý gate ảnh Workload bằng bản vá hoặc base đã được quét đạt. Portal history dùng hợp đồng Argo/GitHub chuẩn và chưa có bằng chứng tích hợp thật trong lần chạy này.
+
+## Checkpoint ban đầu
+
+**Checkpoint trước khi khôi phục quyền ngày 2026-11-27 — BLOCKED. Chưa đủ bằng chứng để chuyển sang R3 Hosted Integration.** Kiểm tra Ansible syntax, inventory và lint đã đạt sau một bản sửa cục bộ. Tiến trình Codex bị từ chối khi kết nối Docker và mở cổng loopback, đồng thời không phân giải được các máy chủ chứa artifact. Chuỗi build → scan → GitOps → phục vụ → giám sát → phục hồi → rollback vẫn chưa được nghiệm thu. R1-12 còn mở.
 
 ## Phiên bản được kiểm tra
 
@@ -89,6 +117,6 @@ docker volume ls --format '{{.Name}}' | sort
 
 Không có tài nguyên Docker cần dọn trong phiên này. Các worktree, refs và commit R2 được giữ để tiếp tục từ đúng SHA. Dữ liệu tạm của Ansible được giữ trong thư mục `/tmp/idp-r2-ansible.*` riêng của phiên. Xóa từng thư mục thử bằng đường dẫn cụ thể sau khi lấy xong bằng chứng. Tránh dùng wildcard để dọn tài nguyên.
 
-## Điều kiện đánh giá lại R3
+### Điều kiện đánh giá lại R3 tại checkpoint ban đầu
 
 Cần bằng chứng từ cùng môi trường thực thi cho Docker, download và loopback, rồi xác minh R1-12 bằng digest/lock đã kiểm chứng và build/scan Linux. Sau đó cần chạy Ansible trên Linux cô lập không dùng AWS, nghiệm thu cluster ba node, quan sát Argo CD và telemetry, kiểm browser/optimizer dựa trên snapshot thực và ghi kết quả k6, HPA, drill hỏng Pod/drain và rollback. Chỉ đánh giá lại R3 sau khi các kiểm tra bắt buộc có kết quả thực tế. [Sổ lỗi](DEFECT_REGISTER.md)
