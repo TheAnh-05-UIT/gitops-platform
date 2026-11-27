@@ -31,3 +31,16 @@ The model accounts for existing nonterminal pod requests and explicit headroom p
 After placement, forecast pressure is based on the greater of booked/reserved capacity and measured use, plus the proposed requests, divided by allocatable. Metrics are independent of hard capacity. The explanation reports the weighted objective components, regional replica counts, proposed per-node packing, capacity remaining, and candidate rejection reasons. The planned packing is a feasibility check for a region selector. Actual node selection belongs to Kubernetes.
 
 The model omits storage bindings, resource quotas, topology spread, tolerations, custom affinity, admission changes, disruption, retry after concurrent scheduling, and multi-container demand estimation. Check those constraints against the target environment before promotion. The tool consumes saved inputs and produces recommendations only. Actual-cluster placement and performance evidence belong to [AWS-15-PLACEMENT](../docs/MANUAL_AWS_GATES.md#aws-15-placement-read-only-evidence-gate).
+
+## Observed exports
+
+Run the capture command on saved approved JSON, with protected output outside Git.
+
+```sh
+python -B -m optimizer.snapshot_capture --inputs observed-inputs.json \
+  --nodes nodes.json --pods pods.json --metrics node-metrics.json \
+  --inventory terraform-inventory.json --revision "$CONFIG_SHA" \
+  --observed-at "$OBSERVED_AT" --output snapshot.json
+```
+
+Supply explicit observed RTT, workload demands and any optional cost fields through the snapshot input contract. Metrics and Terraform inventory are optional. Use NodeMetricsList from the Kubernetes Resource Metrics API for CPU and memory. The adapter uses the oldest metrics sample for freshness, includes only required fields from exports, and rejects inconsistent node sets or topology when Terraform inventory is provided. Portal accepts observed data only when the revision matches Config. Preserve the raw exports privately.
